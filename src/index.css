@@ -1,0 +1,61 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #dbe3ff;
+  --color-brand-700: #0021a5;
+  --color-brand-800: #001b87;
+  --color-brand-900: #00146a;
+  --color-accent-500: #fa4616;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@utility pb-safe-3 {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
+}
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+@utility pt-safe-2 {
+  padding-top: calc(env(safe-area-inset-top) + 0.5rem);
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-slate-50);
+  color: var(--color-slate-900);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-brand-700);
+  outline-offset: 2px;
+}
+
+dialog::backdrop {
+  background: rgb(15 23 42 / 0.55);
+}
+
+/* Keep iOS from zooming into inputs: 16px minimum. */
+input,
+select,
+textarea {
+  font-size: max(16px, 1em);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
