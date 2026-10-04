@@ -52,7 +52,7 @@ begin
       member_type = (p ->> 'type')::public.member_type,
       status = (p ->> 'status')::public.member_status,
       pledge_class = p ->> 'class',
-      approved_at = case when p ->> 'status' = 'approved' then now() end
+      approved_at = case when p ->> 'status' = 'approved' then now() - interval '200 days' end
     where id = v_id;
   end loop;
 end $$;
@@ -65,10 +65,10 @@ declare
   v_saturday date := v_today + ((6 - extract(dow from v_today)::int + 7) % 7);
 begin
   perform calendar.create_event(jsonb_build_object(
-    'title', 'Chapter Meeting', 'category', 'required', 'start_date', v_sunday,
+    'title', 'Chapter Meeting', 'category', 'required', 'start_date', v_sunday - 28,
     'start_time', '19:00', 'end_time', '20:30', 'location', 'Chapter House',
     'description', 'Business attire.',
-    'recurrence', jsonb_build_object('freq', 'weekly', 'interval', 1, 'by_weekday', jsonb_build_array(0), 'count', 12)
+    'recurrence', jsonb_build_object('freq', 'weekly', 'interval', 1, 'by_weekday', jsonb_build_array(0), 'count', 16)
   ));
   perform calendar.create_event(jsonb_build_object(
     'title', 'Fall Formal', 'category', 'social', 'start_date', v_saturday + 14,
@@ -157,4 +157,64 @@ begin
     insert into calendar.schedule_submissions (member_id, semester_id, classes_done_at, exams_done_at, obligations_done_at)
     values (m.id, v_sem, now(), now(), now());
   end loop;
+end $$;
+
+-- Attendance for past chapter meetings, a few excuses and unavailable nights, a sent
+-- notification, and the secretary's email for excuse alerts.
+do $$
+declare
+  v_today date := (now() at time zone 'America/New_York')::date;
+  v_admin uuid := (select id from public.members where email = 'secretary@example.com');
+  v_next uuid := (
+    select id from calendar.events where title = 'Chapter Meeting' and starts_at > now() order by starts_at limit 1
+  );
+  v_last uuid := (
+    select id from calendar.events where title = 'Chapter Meeting' and ends_at < now() order by starts_at desc limit 1
+  );
+  v_note uuid;
+begin
+  update calendar.settings set secretary_email = 'secretary@example.com';
+
+  -- About 8 in 10 present, 1 in 10 excused, the rest never checked in (absent).
+  insert into calendar.attendance (event_id, member_id, status, method, marked_by, marked_at)
+  select e.id, m.id,
+    case when abs(hashtext(e.id::text || m.id::text)) % 10 < 8 then 'present' else 'excused' end,
+    case when abs(hashtext(e.id::text || m.id::text)) % 10 < 8 then 'qr' else 'manual' end,
+    v_admin, e.starts_at + interval '5 minutes'
+  from calendar.events e
+  cross join public.members m
+  where e.required and e.ends_at < now() and m.status = 'approved'
+    and abs(hashtext(e.id::text || m.id::text)) % 10 < 9;
+
+  insert into calendar.excuses (event_id, member_id, reason, status, reviewed_by, reviewed_at, created_at)
+  select v_last, id, 'Orgo exam review session the same night.', 'approved', v_admin, now() - interval '6 days', now() - interval '8 days'
+  from public.members where email = 'brother4@example.com';
+  insert into calendar.attendance (event_id, member_id, status, method, marked_by)
+  select v_last, id, 'excused', 'excuse', v_admin from public.members where email = 'brother4@example.com'
+  on conflict (event_id, member_id) do update set status = 'excused', method = 'excuse';
+
+  insert into calendar.excuses (event_id, member_id, reason)
+  select v_next, id, r from (values
+    ('brother3@example.com', 'Lab practical make-up is scheduled 6:30–8:30 PM that night. Screenshot of the email from my TA available if needed.'),
+    ('am2@example.com', 'Working a closing shift at Publix that I couldn''t swap.')
+  ) as x(email, r)
+  join public.members m on m.email = x.email;
+
+  insert into calendar.night_marks (member_id, night, reason)
+  select m.id, v_today + x.d, x.r from (values
+    ('brother1@example.com', 2, 'Family dinner'),
+    ('brother3@example.com', 5, 'Out of town'),
+    ('brother6@example.com', 2, null),
+    ('am1@example.com', 3, 'Work')
+  ) as x(email, d, r)
+  join public.members m on m.email = x.email;
+
+  insert into calendar.notifications (kind, title, body, url, audience, status, sent_at, recipients, pushed, emailed, created_by, send_at)
+  values ('manual', 'Welcome to the chapter calendar', 'Turn on notifications in Me so you never miss a required event.', '/me',
+    'everyone', 'sent', now() - interval '1 day', 0, 0, 0, v_admin, now() - interval '1 day')
+  returning id into v_note;
+  insert into calendar.notification_inbox (notification_id, member_id, created_at)
+  select v_note, id, now() - interval '1 day' from public.members where status = 'approved' and active;
+  update calendar.notifications set recipients = (select count(*) from calendar.notification_inbox where notification_id = v_note)
+  where id = v_note;
 end $$;

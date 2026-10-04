@@ -202,15 +202,9 @@ async function seedDemo(ref, serviceKey, password) {
        member_type = p.type::public.member_type,
        status = p.status::public.member_status,
        pledge_class = p.class,
-       approved_at = case when p.status = 'approved' then coalesce(m.approved_at, now()) end
+       approved_at = case when p.status = 'approved' then coalesce(m.approved_at, now() - interval '200 days') end
      from jsonb_to_recordset('${json}'::jsonb) as p(email text, role text, type text, class text, status text)
-     where lower(m.email) = lower(p.email);
-     insert into calendar.chair_categories (member_id, category)
-     select m.id, c.value
-     from jsonb_to_recordset('${json}'::jsonb) as p(email text, chair jsonb)
-     join public.members m on lower(m.email) = lower(p.email)
-     cross join lateral jsonb_array_elements_text(coalesce(p.chair, '[]'::jsonb)) as c(value)
-     on conflict do nothing;`,
+     where lower(m.email) = lower(p.email);`,
   )
   const [{ count }] = await sql(ref, 'select count(*)::int as count from calendar.events')
   if (count === 0) {
@@ -240,10 +234,20 @@ const { publicKey, serviceKey } = await apiKeys(ref)
 await migrate(ref)
 const siteUrl = await deploySite({ VITE_SUPABASE_URL: `https://${ref}.supabase.co`, VITE_SUPABASE_ANON_KEY: publicKey })
 await configureAuth(ref, siteUrl)
-log('Deploying the calendar feed function')
-execFileSync('npx', ['supabase', 'functions', 'deploy', 'ics-feed', '--project-ref', ref, '--no-verify-jwt', '--use-api'], {
-  stdio: 'inherit',
-})
+log('Deploying the Edge Functions')
+// Feeds, cron jobs and the notification sender check their own credentials; the rest need a signed-in member.
+for (const [name, ownAuth] of [
+  ['ics-feed', true],
+  ['sync-canvas', true],
+  ['send-notifications', true],
+  ['parse-schedule', false],
+  ['import-calendar', false],
+  ['submit-excuse', false],
+]) {
+  execFileSync('npx', ['supabase', 'functions', 'deploy', name, '--project-ref', ref, '--use-api', ...(ownAuth ? ['--no-verify-jwt'] : [])], {
+    stdio: 'inherit',
+  })
+}
 const password = process.env.DEMO_PASSWORD ?? `Gator-${randomBytes(3).toString('hex')}-${10 + (randomBytes(1)[0] % 90)}`
 await seedDemo(ref, serviceKey, password)
 await smokeTest(siteUrl, ref, publicKey, password)
@@ -252,9 +256,8 @@ console.log(`
 Test site:        ${siteUrl}
 Demo password:    ${password}   (every demo account below)
 Admin:            president@example.com
-Chair (Socials):  social@example.com
 Brother:          brother1@example.com
-Associate:        am1@example.com
+Pledge:           am1@example.com
 Pending:          pending1@example.com
 Supabase:         https://supabase.com/dashboard/project/${ref}
 `)

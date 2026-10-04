@@ -408,6 +408,10 @@ deno_version = 2
 # Local-only values. In production set them with `npx supabase secrets set` (see README).
 [edge_runtime.secrets]
 CRON_SECRET = "local-dev-cron-secret"
+# Local email goes to Mailpit (http://127.0.0.1:54324). Production uses RESEND_API_KEY instead.
+MAILPIT_URL = "http://supabase_inbucket_chapter-hub:8025"
+APP_URL = "http://localhost:5173"
+EMAIL_FROM = "Chapter Calendar <calendar@example.com>"
 
 [analytics]
 enabled = false
@@ -443,4 +447,8 @@ verify_jwt = false
 
 # Called by pg_cron with a shared secret header, not a user JWT.
 [functions.sync-canvas]
+verify_jwt = false
+
+# Called by pg_cron with x-cron-secret, or by admins (the function checks their JWT itself).
+[functions.send-notifications]
 verify_jwt = false

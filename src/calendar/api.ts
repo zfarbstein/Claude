@@ -129,6 +129,11 @@ export function useDeleteEvent() {
   })
 }
 
+/** One event by id, or null if it's gone or hidden from you. */
+export async function fetchEvent(id: string): Promise<CalendarEvent | null> {
+  return unwrap(await cal.from('events').select('*').eq('id', id).maybeSingle())
+}
+
 export async function fetchSeries(seriesId: string) {
   return unwrap(await cal.from('event_series').select('*').eq('id', seriesId).maybeSingle())
 }

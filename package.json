@@ -17,10 +17,11 @@
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local --schema public,calendar > src/lib/database.types.ts",
     "icons": "node scripts/generate-icons.mjs",
+    "vapid": "node scripts/generate-vapid-keys.mjs",
     "deploy:staging": "node scripts/deploy-staging.mjs",
     "build:demo": "node scripts/build-demo.mjs",
     "test:demo": "playwright test -c playwright.demo.config.ts",
-    "check:functions": "cd supabase/functions && deno check ics-feed/index.ts parse-schedule/index.ts import-calendar/index.ts sync-canvas/index.ts"
+    "check:functions": "cd supabase/functions && deno check ics-feed/index.ts parse-schedule/index.ts import-calendar/index.ts sync-canvas/index.ts submit-excuse/index.ts send-notifications/index.ts"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
@@ -28,10 +29,13 @@
     "@supabase/supabase-js": "^2.117.2",
     "@tanstack/react-query": "^5.104.1",
     "date-fns": "^4.4.0",
+    "jsqr": "^1.4.0",
     "lucide-react": "^1.52.0",
+    "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-router": "^8.4.0"
+    "react-router": "^8.4.0",
+    "write-excel-file": "^4.1.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
@@ -40,6 +44,7 @@
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
     "@types/node": "^24.13.3",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",

@@ -25,6 +25,7 @@
     "src/sw.ts",
     "src/test",
     "supabase/functions/**/*.test.ts",
-    "supabase/functions/_shared/server.ts"
+    "supabase/functions/_shared/server.ts",
+    "supabase/functions/_shared/email.ts"
   ]
 }

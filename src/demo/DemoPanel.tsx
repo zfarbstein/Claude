@@ -1,5 +1,5 @@
 import { ArrowLeft, FlaskConical, Mail, RotateCcw } from 'lucide-react'
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { Sheet } from '../components/Sheet'
@@ -7,12 +7,13 @@ import { useToast } from '../components/Toast'
 import { Alert, Button } from '../components/ui'
 import { cx } from '../lib/cx'
 import { supabase } from '../lib/supabase'
-import { DEMO_PASSWORD, getOutbox, getVersion, markInboxRead, resetDemo, subscribe, type DemoEmail } from './backend'
+import { DEMO_PASSWORD, getOutbox, getVersion, markInboxRead, resetDemo, startDemoScheduler, subscribe, type DemoEmail } from './backend'
 
 const ACCOUNTS = [
   { email: 'president@example.com', label: 'Admin', name: 'Alex Rivera' },
   { email: 'brother1@example.com', label: 'Brother', name: 'Marcus Johnson' },
   { email: 'am1@example.com', label: 'Pledge', name: 'Luke Garcia' },
+  { email: 'secretary@example.com', label: 'Admin (secretary, gets excuse emails)', name: 'Jordan Lee' },
   { email: 'brother2@example.com', label: 'Brother, schedule not set up', name: 'Ethan Kim' },
   { email: 'pending1@example.com', label: 'Waiting for approval', name: 'Pat Newcomer' },
 ]
@@ -38,6 +39,11 @@ export default function DemoPanel() {
   const [reading, setReading] = useState<DemoEmail | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
+  // Stands in for the 5-minute pg_cron job: scheduled notifications and reminders go out while the demo is open.
+  useEffect(() => {
+    const timer = startDemoScheduler()
+    return () => clearInterval(timer)
+  }, [])
   const outbox = getOutbox()
   const unread = outbox.filter((m) => !m.read).length
   const currentEmail = session?.user.email
@@ -105,8 +111,8 @@ export default function DemoPanel() {
       <Sheet open={open} onClose={close} title="Demo tools">
         <div className="flex flex-col gap-4">
           <p className="text-sm text-slate-700">
-            This test version runs entirely in your browser with sample members and events. Emails the app sends show up in the
-            Inbox tab here instead of a real inbox.
+            This test version runs entirely in your browser with sample members, events, schedules and attendance. Emails the app
+            sends (sign-up, password reset, excuse alerts to the secretary, notification emails) show up in the Inbox tab here.
           </p>
           <div role="tablist" aria-label="Demo tools" className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
             {(['accounts', 'inbox'] as const).map((t) => (

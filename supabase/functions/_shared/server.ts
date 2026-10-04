@@ -68,6 +68,7 @@ export async function rest<T = unknown>(path: string, init: { method?: string; b
 
 export interface Caller {
   id: string
+  admin: boolean
 }
 
 /** The signed-in, approved, active member making this request. */
@@ -77,9 +78,47 @@ export async function requireMember(req: Request): Promise<Caller> {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: serviceHeaders.apikey, authorization } })
   if (!res.ok) throw new HttpError(401, 'Sign in again.')
   const user = (await res.json()) as { id: string }
-  const rows = await rest<{ status: string; active: boolean }[]>(`members?id=eq.${user.id}&select=status,active`, { schema: 'public' })
+  const rows = await rest<{ status: string; active: boolean; role: string }[]>(`members?id=eq.${user.id}&select=status,active,role`, { schema: 'public' })
   if (!rows[0] || rows[0].status !== 'approved' || !rows[0].active) throw new HttpError(403, 'Your account isn’t approved yet.')
-  return { id: user.id }
+  return { id: user.id, admin: rows[0].role === 'admin' }
+}
+
+export async function requireAdmin(req: Request): Promise<Caller> {
+  const caller = await requireMember(req)
+  if (!caller.admin) throw new HttpError(403, 'Only admins can do that.')
+  return caller
+}
+
+// Legacy anon JWT, or the first of the newer sb_publishable_ keys.
+const ANON_KEY =
+  Deno.env.get('SUPABASE_ANON_KEY') ?? (Object.values(JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS') ?? '{}'))[0] as string | undefined)
+
+/** PostgREST call as the signed-in member, so RLS and auth.uid() apply. Database errors become HttpErrors. */
+export async function userRest<T = unknown>(req: Request, path: string, init: { method?: string; body?: unknown; schema?: string } = {}): Promise<T> {
+  const method = init.method ?? 'GET'
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers: {
+      apikey: ANON_KEY ?? serviceHeaders.apikey,
+      authorization: req.headers.get('authorization') ?? '',
+      'content-type': 'application/json',
+      [method === 'GET' ? 'accept-profile' : 'content-profile']: init.schema ?? 'calendar',
+    },
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+  })
+  const text = await res.text()
+  if (!res.ok) {
+    const detail = (() => {
+      try {
+        return JSON.parse(text) as { message?: string; code?: string }
+      } catch {
+        return {}
+      }
+    })()
+    const status = detail.code === '42501' ? 403 : detail.code === '23505' ? 409 : res.status >= 500 ? 502 : 400
+    throw new HttpError(status, detail.message ?? 'Something went wrong. Try again.')
+  }
+  return (text ? JSON.parse(text) : null) as T
 }
 
 export interface Semester {

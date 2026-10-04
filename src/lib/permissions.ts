@@ -26,6 +26,9 @@ export function accessFields(access: Access): { role: MemberRole; member_type: M
   return { role: 'member', member_type: 'associate' }
 }
 
+/** Brothers and admins see the member list and the chapter availability heatmap; pledges don't. */
+export const canSeeChapter = (m: Member | null | undefined) => isBrother(m)
+
 /** Only admins create, edit and delete chapter events. */
 export const canManageEvents = (m: Member | null | undefined) => isAdmin(m)
 

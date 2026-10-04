@@ -1,6 +1,7 @@
-import { CalendarClock, EyeOff, MapPin, Pencil, Repeat, Trash2, UserRound } from 'lucide-react'
+import { CalendarClock, ClipboardCheck, EyeOff, FileText, MapPin, Pencil, QrCode, Repeat, ScanLine, Trash2, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
+import { checkinOpen } from '../attendance/api'
 import { useAuth } from '../auth/AuthProvider'
 import { Sheet } from '../components/Sheet'
 import { useToast } from '../components/Toast'
@@ -8,6 +9,7 @@ import { Alert, Badge, Button } from '../components/ui'
 import { cx } from '../lib/cx'
 import { canManageEvents, canRsvp, isBrother } from '../lib/permissions'
 import { formatLongDay, formatTimeRange } from '../lib/time'
+import { useNow } from '../lib/useNow'
 import type { CalendarEvent, Category, DisplayEvent, RsvpStatus } from '../lib/types'
 import { useDeleteEvent, useEventRsvps, useSetRsvp } from './api'
 import { RSVP_LABELS } from './labels'
@@ -41,6 +43,7 @@ function EventDetailBody({ event, category, myRsvp, onClose, onEdit }: EventDeta
   const setRsvp = useSetRsvp(member!.id)
   const del = useDeleteEvent()
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const now = useNow().getTime()
   const color = category?.color ?? '#4B5563'
 
   const chooseRsvp = (status: RsvpStatus) =>
@@ -131,8 +134,21 @@ function EventDetailBody({ event, category, myRsvp, onClose, onEdit }: EventDeta
         </p>
       )}
 
+      {!personal && checkinOpen(event, now) && (
+        <Link to={`/scan?event=${event.id}`} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-green-700 font-semibold text-white hover:bg-green-800">
+          <ScanLine aria-hidden className="size-5" /> Check in
+        </Link>
+      )}
+
       {event.required && (
-        <Alert kind="info">This is a required chapter event. Attendance is taken. If you can&rsquo;t make it, submit an excuse.</Alert>
+        <Alert kind="info">
+          <p>This is a required chapter event. Attendance is taken.</p>
+          {Date.parse(event.ends_at) > now - 7 * 24 * 3600_000 && (
+            <Link to={`/excuse?event=${event.id}`} className="mt-2 inline-flex min-h-11 items-center gap-2 font-semibold text-brand-700 underline">
+              <FileText aria-hidden className="size-4" /> Can&rsquo;t make it? Request an excuse
+            </Link>
+          )}
+        </Alert>
       )}
 
       {rsvpOpen && (
@@ -173,6 +189,17 @@ function EventDetailBody({ event, category, myRsvp, onClose, onEdit }: EventDeta
             ) : null,
           )}
         </section>
+      )}
+
+      {manage && !event.all_day && (
+        <div className="grid grid-cols-2 gap-2 border-t border-slate-200 pt-4">
+          <Link to={`/attendance/${event.id}`} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white font-semibold text-slate-900 ring-1 ring-slate-300">
+            <ClipboardCheck aria-hidden className="size-5" /> Attendance
+          </Link>
+          <Link to={`/attendance/${event.id}/code`} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white font-semibold text-slate-900 ring-1 ring-slate-300">
+            <QrCode aria-hidden className="size-5" /> Check-in code
+          </Link>
+        </div>
       )}
 
       {manage && !confirmDelete && (

@@ -1,4 +1,4 @@
-import { CalendarDays, CalendarPlus, Copy, KeyRound, LogOut, RefreshCw, Smartphone } from 'lucide-react'
+import { CalendarDays, CalendarPlus, Copy, FileText, KeyRound, LogOut, RefreshCw, Smartphone } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { useAuth } from '../auth/AuthProvider'
@@ -9,6 +9,8 @@ import { Alert, Badge, Button, TextField } from '../components/ui'
 import { ACCESS_LABELS, accessOf } from '../lib/permissions'
 import { isIos, isStandalone } from '../lib/platform'
 import { cal, functionsUrl, supabase } from '../lib/supabase'
+import { NotificationSettings } from '../notifications/NotificationSettings'
+import { disablePush } from '../notifications/push'
 
 export default function MePage() {
   const { member, refreshMember, signOut } = useAuth()
@@ -59,6 +61,15 @@ export default function MePage() {
           <span className="ml-auto text-sm font-semibold text-slate-600">Classes, exams, obligations</span>
         </Link>
 
+        <Link
+          to="/excuse"
+          className="flex min-h-14 items-center gap-3 rounded-2xl bg-white px-4 font-bold text-slate-900 ring-1 ring-slate-200 hover:bg-slate-50"
+        >
+          <FileText aria-hidden className="size-5 text-brand-700" /> Excuses
+          <span className="ml-auto text-sm font-semibold text-slate-600">Can&rsquo;t make a required event?</span>
+        </Link>
+
+        <NotificationSettings />
         <FeedSection />
         <InstallSection />
 
@@ -69,7 +80,15 @@ export default function MePage() {
           >
             <KeyRound aria-hidden className="size-5" /> Change password
           </Link>
-          <Button variant="secondary" onClick={() => void signOut()}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              // Stop this device getting the signed-out member's notifications.
+              void disablePush()
+                .catch(() => undefined)
+                .finally(() => void signOut())
+            }}
+          >
             <LogOut aria-hidden className="size-5" /> Sign out
           </Button>
         </section>

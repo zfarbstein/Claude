@@ -54,7 +54,7 @@ interface FieldProps {
 
 function FieldShell({ id, label, hint, error, children }: FieldProps & { id: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-1.5">
       <label htmlFor={id} className="text-sm font-semibold text-slate-800">
         {label}
       </label>
@@ -74,7 +74,7 @@ function FieldShell({ id, label, hint, error, children }: FieldProps & { id: str
 }
 
 const inputClass =
-  'min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-base text-slate-900 placeholder:text-slate-500 focus:border-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-700/30 disabled:bg-slate-100'
+  'min-h-12 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-base text-slate-900 placeholder:text-slate-500 focus:border-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-700/30 disabled:bg-slate-100'
 
 export function TextField({ label, hint, error, className, ...rest }: FieldProps & InputHTMLAttributes<HTMLInputElement>) {
   const id = useId()

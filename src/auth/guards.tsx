@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router'
 import { FullScreenMessage, Spinner } from '../components/ui'
-import { isActiveMember, isAdmin } from '../lib/permissions'
+import { canSeeChapter, isActiveMember, isAdmin } from '../lib/permissions'
 import { useAuth } from './AuthProvider'
 
 export function FullScreenLoading() {
@@ -36,6 +36,13 @@ export function RequireApproved({ children }: { children: ReactNode }) {
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const { member } = useAuth()
   if (!isAdmin(member)) return <Navigate to="/" replace />
+  return children
+}
+
+/** Brothers and admins only (the member list); pledges go back to the calendar. */
+export function RequireBrother({ children }: { children: ReactNode }) {
+  const { member } = useAuth()
+  if (!canSeeChapter(member)) return <Navigate to="/" replace />
   return children
 }
 

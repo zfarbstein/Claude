@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { lazy, Suspense, useEffect, useRef } from 'react'
 import { BrowserRouter, MemoryRouter, Navigate, Route, Routes } from 'react-router'
 import { AuthProvider, useAuth } from './auth/AuthProvider'
-import { FullScreenLoading, PublicOnly, RequireAdmin, RequireApproved, RequireSession } from './auth/guards'
+import { FullScreenLoading, PublicOnly, RequireAdmin, RequireApproved, RequireBrother, RequireSession } from './auth/guards'
 import { AppLayout } from './components/AppLayout'
 import { RequireSchedule } from './schedule/RequireSchedule'
 import { InstallPrompt } from './components/InstallPrompt'
@@ -24,6 +24,22 @@ const AdminMembers = lazy(() => import('./pages/admin/AdminMembers'))
 const AdminSemester = lazy(() => import('./pages/admin/AdminSemester'))
 const SetupPage = lazy(() => import('./schedule/SetupPage'))
 const MySchedulePage = lazy(() => import('./schedule/MySchedulePage'))
+const MembersPage = lazy(() => import('./members/MembersPage'))
+const MemberPage = lazy(() => import('./members/MemberPage'))
+const InboxPage = lazy(() => import('./notifications/InboxPage'))
+const ExcusePage = lazy(() => import('./excuses/ExcusePage'))
+const ScanPage = lazy(() => import('./attendance/ScanPage'))
+const CheckInPage = lazy(() => import('./attendance/CheckInPage'))
+const RosterPage = lazy(() => import('./attendance/RosterPage'))
+const CheckinCodePage = lazy(() => import('./attendance/CheckinCodePage'))
+const AdminSchedules = lazy(() => import('./pages/admin/AdminSchedules'))
+const AdminSubmission = lazy(() => import('./pages/admin/AdminSubmission'))
+const AdminAttendance = lazy(() => import('./pages/admin/AdminAttendance'))
+const AdminExcuses = lazy(() => import('./pages/admin/AdminExcuses'))
+const AdminNotify = lazy(() => import('./pages/admin/AdminNotify'))
+const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
+const AdminExport = lazy(() => import('./pages/admin/AdminExport'))
+const AdminApps = lazy(() => import('./pages/admin/AdminApps'))
 
 // The in-Claude demo (npm run build:demo) runs in a frame with no real URL, so it routes in memory.
 const DEMO = !!import.meta.env.VITE_DEMO
@@ -70,6 +86,10 @@ export default function App() {
                 <Route path="/pending" element={<RequireSession><Pending /></RequireSession>} />
                 <Route path="/setup" element={<RequireSession><RequireApproved><SetupPage /></RequireApproved></RequireSession>} />
                 <Route
+                  path="/attendance/:eventId/code"
+                  element={<RequireSession><RequireApproved><RequireAdmin><CheckinCodePage /></RequireAdmin></RequireApproved></RequireSession>}
+                />
+                <Route
                   element={
                     <RequireSession>
                       <RequireApproved>
@@ -81,10 +101,25 @@ export default function App() {
                   <Route index element={<RequireSchedule><CalendarPage /></RequireSchedule>} />
                   <Route path="me" element={<MePage />} />
                   <Route path="me/schedule" element={<MySchedulePage />} />
+                  <Route path="inbox" element={<InboxPage />} />
+                  <Route path="excuse" element={<ExcusePage />} />
+                  <Route path="scan" element={<ScanPage />} />
+                  <Route path="checkin" element={<CheckInPage />} />
+                  <Route path="members" element={<RequireBrother><MembersPage /></RequireBrother>} />
+                  <Route path="members/:id" element={<RequireBrother><MemberPage /></RequireBrother>} />
+                  <Route path="attendance/:eventId" element={<RequireAdmin><RosterPage /></RequireAdmin>} />
+                  <Route path="admin/schedules/:memberId" element={<RequireAdmin><AdminSubmission /></RequireAdmin>} />
                   <Route path="admin" element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
                     <Route index element={<Navigate to="members" replace />} />
                     <Route path="members" element={<AdminMembers />} />
+                    <Route path="schedules" element={<AdminSchedules />} />
+                    <Route path="attendance" element={<AdminAttendance />} />
+                    <Route path="excuses" element={<AdminExcuses />} />
+                    <Route path="notify" element={<AdminNotify />} />
                     <Route path="semester" element={<AdminSemester />} />
+                    <Route path="settings" element={<AdminSettings />} />
+                    <Route path="export" element={<AdminExport />} />
+                    <Route path="apps" element={<AdminApps />} />
                   </Route>
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />

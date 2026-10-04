@@ -9,6 +9,41 @@ export type Json =
 export type Database = {
   calendar: {
     Tables: {
+      attendance: {
+        Row: {
+          event_id: string;
+          marked_at: string;
+          marked_by: string | null;
+          member_id: string;
+          method: string;
+          status: string;
+        };
+        Insert: {
+          event_id: string;
+          marked_at?: string;
+          marked_by?: string | null;
+          member_id: string;
+          method: string;
+          status: string;
+        };
+        Update: {
+          event_id?: string;
+          marked_at?: string;
+          marked_by?: string | null;
+          member_id?: string;
+          method?: string;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "attendance_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       categories: {
         Row: {
           color: string;
@@ -29,6 +64,55 @@ export type Database = {
           sort_order?: number;
         };
         Relationships: [];
+      };
+      checkin_failures: {
+        Row: {
+          at: string;
+          event_id: string;
+          member_id: string;
+        };
+        Insert: {
+          at?: string;
+          event_id: string;
+          member_id: string;
+        };
+        Update: {
+          at?: string;
+          event_id?: string;
+          member_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "checkin_failures_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      checkin_secrets: {
+        Row: {
+          event_id: string;
+          secret: string;
+        };
+        Insert: {
+          event_id: string;
+          secret?: string;
+        };
+        Update: {
+          event_id?: string;
+          secret?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "checkin_secrets_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: true;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       dated_items: {
         Row: {
@@ -194,6 +278,53 @@ export type Database = {
           },
         ];
       };
+      excuses: {
+        Row: {
+          attachment_path: string | null;
+          created_at: string;
+          event_id: string;
+          id: string;
+          member_id: string;
+          reason: string;
+          review_note: string | null;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          status: string;
+        };
+        Insert: {
+          attachment_path?: string | null;
+          created_at?: string;
+          event_id: string;
+          id?: string;
+          member_id: string;
+          reason: string;
+          review_note?: string | null;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          status?: string;
+        };
+        Update: {
+          attachment_path?: string | null;
+          created_at?: string;
+          event_id?: string;
+          id?: string;
+          member_id?: string;
+          reason?: string;
+          review_note?: string | null;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "excuses_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       feed_tokens: {
         Row: {
           created_at: string;
@@ -209,6 +340,172 @@ export type Database = {
           created_at?: string;
           member_id?: string;
           token?: string;
+        };
+        Relationships: [];
+      };
+      night_marks: {
+        Row: {
+          created_at: string;
+          member_id: string;
+          night: string;
+          reason: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          member_id: string;
+          night: string;
+          reason?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          member_id?: string;
+          night?: string;
+          reason?: string | null;
+        };
+        Relationships: [];
+      };
+      notification_inbox: {
+        Row: {
+          created_at: string;
+          emailed: boolean;
+          member_id: string;
+          notification_id: string;
+          pushed: boolean;
+          read_at: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          emailed?: boolean;
+          member_id: string;
+          notification_id: string;
+          pushed?: boolean;
+          read_at?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          emailed?: boolean;
+          member_id?: string;
+          notification_id?: string;
+          pushed?: boolean;
+          read_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notification_inbox_notification_id_fkey";
+            columns: ["notification_id"];
+            isOneToOne: false;
+            referencedRelation: "notifications";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      notifications: {
+        Row: {
+          audience: string;
+          body: string;
+          claimed_at: string | null;
+          created_at: string;
+          created_by: string | null;
+          dedupe_key: string | null;
+          emailed: number | null;
+          error: string | null;
+          event_id: string | null;
+          id: string;
+          kind: string;
+          member_ids: string[];
+          pushed: number | null;
+          recipients: number | null;
+          send_at: string;
+          sent_at: string | null;
+          status: string;
+          title: string;
+          url: string;
+        };
+        Insert: {
+          audience: string;
+          body?: string;
+          claimed_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          dedupe_key?: string | null;
+          emailed?: number | null;
+          error?: string | null;
+          event_id?: string | null;
+          id?: string;
+          kind: string;
+          member_ids?: string[];
+          pushed?: number | null;
+          recipients?: number | null;
+          send_at?: string;
+          sent_at?: string | null;
+          status?: string;
+          title: string;
+          url?: string;
+        };
+        Update: {
+          audience?: string;
+          body?: string;
+          claimed_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          dedupe_key?: string | null;
+          emailed?: number | null;
+          error?: string | null;
+          event_id?: string | null;
+          id?: string;
+          kind?: string;
+          member_ids?: string[];
+          pushed?: number | null;
+          recipients?: number | null;
+          send_at?: string;
+          sent_at?: string | null;
+          status?: string;
+          title?: string;
+          url?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notifications_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      push_subscriptions: {
+        Row: {
+          auth: string;
+          created_at: string;
+          endpoint: string;
+          failure_count: number;
+          id: string;
+          last_success_at: string | null;
+          member_id: string;
+          p256dh: string;
+          user_agent: string | null;
+        };
+        Insert: {
+          auth: string;
+          created_at?: string;
+          endpoint: string;
+          failure_count?: number;
+          id?: string;
+          last_success_at?: string | null;
+          member_id: string;
+          p256dh: string;
+          user_agent?: string | null;
+        };
+        Update: {
+          auth?: string;
+          created_at?: string;
+          endpoint?: string;
+          failure_count?: number;
+          id?: string;
+          last_success_at?: string | null;
+          member_id?: string;
+          p256dh?: string;
+          user_agent?: string | null;
         };
         Relationships: [];
       };
@@ -367,28 +664,49 @@ export type Database = {
       };
       settings: {
         Row: {
+          email_fallback: boolean;
+          excuse_attachment_required: boolean;
+          excuses_enabled: boolean;
           id: boolean;
           night_end: string;
           night_start: string;
+          reminders_enabled: boolean;
           secretary_email: string | null;
           timezone: string;
           updated_at: string;
+          weekly_reminder_dow: number;
+          weekly_reminder_enabled: boolean;
+          weekly_reminder_time: string;
         };
         Insert: {
+          email_fallback?: boolean;
+          excuse_attachment_required?: boolean;
+          excuses_enabled?: boolean;
           id?: boolean;
           night_end?: string;
           night_start?: string;
+          reminders_enabled?: boolean;
           secretary_email?: string | null;
           timezone?: string;
           updated_at?: string;
+          weekly_reminder_dow?: number;
+          weekly_reminder_enabled?: boolean;
+          weekly_reminder_time?: string;
         };
         Update: {
+          email_fallback?: boolean;
+          excuse_attachment_required?: boolean;
+          excuses_enabled?: boolean;
           id?: boolean;
           night_end?: string;
           night_start?: string;
+          reminders_enabled?: boolean;
           secretary_email?: string | null;
           timezone?: string;
           updated_at?: string;
+          weekly_reminder_dow?: number;
+          weekly_reminder_enabled?: boolean;
+          weekly_reminder_time?: string;
         };
         Relationships: [];
       };
@@ -447,6 +765,11 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      _checkin_code: {
+        Args: { p_secret: string; p_window: number };
+        Returns: string;
+      };
+      _checkin_window: { Args: Record<PropertyKey, never>; Returns: number };
       _insert_items: {
         Args: {
           p_items: Json;
@@ -456,11 +779,91 @@ export type Database = {
         };
         Returns: undefined;
       };
+      _night_statuses: {
+        Args: { p_end: string; p_member?: string; p_start: string };
+        Returns: {
+          member_id: string;
+          night: string;
+          reasons: Json;
+          status: string;
+        }[];
+      };
+      _required_event_on_night: {
+        Args: { p_night: string };
+        Returns: {
+          all_day: boolean;
+          category: string;
+          created_at: string;
+          created_by: string | null;
+          description: string | null;
+          ends_at: string;
+          hidden_from_associates: boolean;
+          id: string;
+          location: string | null;
+          required: boolean;
+          rsvp_enabled: boolean;
+          series_id: string | null;
+          starts_at: string;
+          title: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "events";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       apply_feed_sync: {
         Args: { p_items: Json; p_member_id: string; p_semester_id: string };
         Returns: number;
       };
+      attendance_report: {
+        Args: { p_categories?: string[]; p_from: string; p_to: string };
+        Returns: Json;
+      };
+      cancel_notification: { Args: { p_id: string }; Returns: undefined };
       chapter_timezone: { Args: Record<PropertyKey, never>; Returns: string };
+      check_in: { Args: { p_code: string; p_event_id: string }; Returns: Json };
+      checkin_code: {
+        Args: { p_event_id: string };
+        Returns: {
+          closes_at: string;
+          code: string;
+          expires_at: string;
+          opens_at: string;
+        }[];
+      };
+      claim_due_notifications: {
+        Args: { p_limit?: number };
+        Returns: {
+          audience: string;
+          body: string;
+          claimed_at: string | null;
+          created_at: string;
+          created_by: string | null;
+          dedupe_key: string | null;
+          emailed: number | null;
+          error: string | null;
+          event_id: string | null;
+          id: string;
+          kind: string;
+          member_ids: string[];
+          pushed: number | null;
+          recipients: number | null;
+          send_at: string;
+          sent_at: string | null;
+          status: string;
+          title: string;
+          url: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "notifications";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
       create_event: {
         Args: { p: Json };
         Returns: {
@@ -486,6 +889,23 @@ export type Database = {
           isOneToOne: false;
           isSetofReturn: true;
         };
+      };
+      delete_push_subscription: {
+        Args: { p_endpoint: string };
+        Returns: undefined;
+      };
+      event_roster: {
+        Args: { p_event_id: string };
+        Returns: {
+          excuse_status: string;
+          marked_at: string;
+          member_id: string;
+          member_type: Database["public"]["Enums"]["member_type"];
+          method: string;
+          name: string;
+          pledge_class: string;
+          status: string;
+        }[];
       };
       expand_recurrence: {
         Args: {
@@ -526,6 +946,111 @@ export type Database = {
         };
         Returns: Record<string, unknown>;
       };
+      mark_inbox_read: {
+        Args: { p_notification_ids?: string[] };
+        Returns: undefined;
+      };
+      member_nights: {
+        Args: { p_end: string; p_member: string; p_start: string };
+        Returns: {
+          mark_reason: string;
+          marked: boolean;
+          night: string;
+          reasons: Json;
+          required_event_id: string;
+          required_event_title: string;
+          status: string;
+        }[];
+      };
+      member_schedule: { Args: { p_member: string }; Returns: Json };
+      night_detail: {
+        Args: { p_night: string };
+        Returns: {
+          member_id: string;
+          member_type: Database["public"]["Enums"]["member_type"];
+          name: string;
+          reasons: Json;
+          status: string;
+        }[];
+      };
+      night_summary: {
+        Args: { p_end: string; p_start: string };
+        Returns: {
+          busy: number;
+          free: number;
+          night: string;
+          total: number;
+          unknown: number;
+        }[];
+      };
+      notification_recipients: {
+        Args: { p_notification_id: string };
+        Returns: {
+          email: string;
+          member_id: string;
+          name: string;
+        }[];
+      };
+      open_checkins: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          all_day: boolean;
+          category: string;
+          created_at: string;
+          created_by: string | null;
+          description: string | null;
+          ends_at: string;
+          hidden_from_associates: boolean;
+          id: string;
+          location: string | null;
+          required: boolean;
+          rsvp_enabled: boolean;
+          series_id: string | null;
+          starts_at: string;
+          title: string;
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "events";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      queue_due_notifications: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
+      };
+      review_excuse: {
+        Args: { p_approve: boolean; p_excuse_id: string; p_note?: string };
+        Returns: {
+          attachment_path: string | null;
+          created_at: string;
+          event_id: string;
+          id: string;
+          member_id: string;
+          reason: string;
+          review_note: string | null;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          status: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "excuses";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      save_push_subscription: {
+        Args: {
+          p_auth: string;
+          p_endpoint: string;
+          p_p256dh: string;
+          p_user_agent?: string;
+        };
+        Returns: undefined;
+      };
       save_schedule_step: {
         Args: {
           p_blocks?: Json;
@@ -552,6 +1077,51 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      send_notification: {
+        Args: {
+          p_audience: string;
+          p_body: string;
+          p_member_ids?: string[];
+          p_send_at?: string;
+          p_title: string;
+          p_url?: string;
+        };
+        Returns: {
+          audience: string;
+          body: string;
+          claimed_at: string | null;
+          created_at: string;
+          created_by: string | null;
+          dedupe_key: string | null;
+          emailed: number | null;
+          error: string | null;
+          event_id: string | null;
+          id: string;
+          kind: string;
+          member_ids: string[];
+          pushed: number | null;
+          recipients: number | null;
+          send_at: string;
+          sent_at: string | null;
+          status: string;
+          title: string;
+          url: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "notifications";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      set_attendance: {
+        Args: { p_event_id: string; p_member_id: string; p_status: string };
+        Returns: undefined;
+      };
+      set_night_mark: {
+        Args: { p_night: string; p_reason?: string; p_unavailable: boolean };
+        Returns: undefined;
+      };
       start_semester: {
         Args: { p_ends_on: string; p_name: string; p_starts_on: string };
         Returns: {
@@ -576,6 +1146,31 @@ export type Database = {
           submitted: number;
           total: number;
         }[];
+      };
+      submit_excuse: {
+        Args: {
+          p_attachment_path?: string;
+          p_event_id: string;
+          p_reason: string;
+        };
+        Returns: {
+          attachment_path: string | null;
+          created_at: string;
+          event_id: string;
+          id: string;
+          member_id: string;
+          reason: string;
+          review_note: string | null;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          status: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "excuses";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       update_event: {
         Args: { p: Json; p_id: string; p_scope?: string };
@@ -613,6 +1208,33 @@ export type Database = {
   };
   public: {
     Tables: {
+      hub_apps: {
+        Row: {
+          created_at: string;
+          icon: string;
+          id: string;
+          name: string;
+          sort_order: number;
+          url: string;
+        };
+        Insert: {
+          created_at?: string;
+          icon?: string;
+          id?: string;
+          name: string;
+          sort_order?: number;
+          url: string;
+        };
+        Update: {
+          created_at?: string;
+          icon?: string;
+          id?: string;
+          name?: string;
+          sort_order?: number;
+          url?: string;
+        };
+        Relationships: [];
+      };
       members: {
         Row: {
           active: boolean;
