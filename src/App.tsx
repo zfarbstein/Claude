@@ -1,7 +1,7 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { lazy, Suspense, useEffect } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
-import { AuthProvider } from './auth/AuthProvider'
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
+import { lazy, Suspense, useEffect, useRef } from 'react'
+import { BrowserRouter, MemoryRouter, Navigate, Route, Routes } from 'react-router'
+import { AuthProvider, useAuth } from './auth/AuthProvider'
 import { FullScreenLoading, PublicOnly, RequireAdmin, RequireApproved, RequireSession } from './auth/guards'
 import { AppLayout } from './components/AppLayout'
 import { InstallPrompt } from './components/InstallPrompt'
@@ -20,11 +20,29 @@ import Signup from './pages/Signup'
 const MePage = lazy(() => import('./pages/MePage'))
 const AdminMembers = lazy(() => import('./pages/admin/AdminMembers'))
 
+// The in-Claude demo (npm run build:demo) runs in a frame with no real URL, so it routes in memory.
+const DEMO = !!import.meta.env.VITE_DEMO
+const Router = DEMO ? MemoryRouter : BrowserRouter
+const DemoPanel = DEMO ? lazy(() => import('./demo/DemoPanel')) : null
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 30_000, retry: 2, refetchOnWindowFocus: true },
   },
 })
+
+/** Drops cached queries when a different person signs in, so nobody sees the last user's data. */
+function ClearCacheOnUserChange() {
+  const { session } = useAuth()
+  const queryClient = useQueryClient()
+  const userId = session?.user.id ?? null
+  const previous = useRef(userId)
+  useEffect(() => {
+    if (previous.current !== userId) queryClient.clear()
+    previous.current = userId
+  }, [userId, queryClient])
+  return null
+}
 
 export default function App() {
   useEffect(() => {
@@ -32,7 +50,7 @@ export default function App() {
   }, [])
 
   return (
-    <BrowserRouter>
+    <Router>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           <AuthProvider>
@@ -61,11 +79,17 @@ export default function App() {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Suspense>
+            <ClearCacheOnUserChange />
             <InstallPrompt />
             <UpdatePrompt />
+            {DemoPanel && (
+              <Suspense fallback={null}>
+                <DemoPanel />
+              </Suspense>
+            )}
           </AuthProvider>
         </ToastProvider>
       </QueryClientProvider>
-    </BrowserRouter>
+    </Router>
   )
 }

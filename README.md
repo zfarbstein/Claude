@@ -14,6 +14,17 @@ Mobile-first PWA for chapter events, availability, and attendance. It's the firs
 | 4 | Attendance (rotating QR + roster), excuse form | |
 | 5 | Notifications, admin panel, Excel export, hub Apps menu | |
 
+## Demo inside Claude (no accounts needed)
+
+`npm run build:demo` builds the real app with Supabase swapped for an in-browser stand-in (`src/demo`) and packs it into one HTML page. That page is published as a private claude.ai Artifact for testing each phase before anything is deployed.
+
+The demo includes:
+- the sample members and events
+- a **Demo** button for switching accounts and resetting the data
+- an inbox that catches the emails the app sends
+
+The stand-in follows the same permission rules as the RLS policies. The real rules are tested against Postgres by `npm run test:db`. `npm run test:demo` smoke-tests the demo build.
+
 ## Architecture
 
 ```

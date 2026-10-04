@@ -65,7 +65,11 @@ export default function ResetPassword() {
     }
     // Sign out any other device that had the old password.
     await supabase.auth.signOut({ scope: 'others' }).catch(() => undefined)
-    window.history.replaceState(null, '', '/reset-password')
+    try {
+      window.history.replaceState(null, '', '/reset-password')
+    } catch {
+      // Framed previews can refuse URL changes; the token is already spent either way.
+    }
     setBusy(false)
     setDone(true)
   }

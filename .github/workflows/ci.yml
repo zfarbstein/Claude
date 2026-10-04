@@ -48,6 +48,8 @@ jobs:
         run: npx playwright test
         env:
           CI: 'true'
+      - name: Demo build smoke test
+        run: npm run test:demo
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

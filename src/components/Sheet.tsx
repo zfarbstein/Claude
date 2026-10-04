@@ -17,7 +17,14 @@ export function Sheet({ open, onClose, title, children, footer }: SheetProps) {
   useEffect(() => {
     const dialog = ref.current
     if (!dialog) return
-    if (open && !dialog.open) dialog.showModal()
+    if (open && !dialog.open) {
+      try {
+        dialog.showModal()
+      } catch {
+        // Some embedded frames refuse modal dialogs; a non-modal one still works.
+        dialog.show()
+      }
+    }
     if (!open && dialog.open) dialog.close()
   }, [open])
 

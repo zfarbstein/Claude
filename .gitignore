@@ -38,3 +38,6 @@ coverage
 supabase/.branches
 supabase/.temp
 supabase/.env
+
+# demo build
+dist-demo

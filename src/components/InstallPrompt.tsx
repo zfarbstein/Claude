@@ -92,7 +92,7 @@ export function InstallPrompt() {
     setDismissed(true)
   }
 
-  if (standalone || dismissed) return null
+  if (standalone || dismissed || import.meta.env.VITE_DEMO) return null
 
   if (ios) {
     return (

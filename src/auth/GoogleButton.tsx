@@ -7,6 +7,10 @@ export function GoogleButton() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const signIn = async () => {
+    if (import.meta.env.VITE_DEMO) {
+      setError('Google sign-in works on the live site. In this demo, use email or the demo accounts.')
+      return
+    }
     setBusy(true)
     setError(null)
     const { error } = await supabase.auth.signInWithOAuth({

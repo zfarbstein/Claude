@@ -133,6 +133,9 @@ function FeedSection() {
             </button>
           </div>
           <p className="text-sm text-slate-600">This link is personal. Anyone who has it can see the chapter calendar, so don&rsquo;t share it.</p>
+          {import.meta.env.VITE_DEMO && (
+            <Alert kind="info">In the demo this link doesn&rsquo;t open anything. After launch it adds the chapter calendar to Google or Apple Calendar.</Alert>
+          )}
           {confirmReset ? (
             <Alert kind="info">
               <p className="mb-2">Reset the link? Calendars using the old one will stop updating.</p>
