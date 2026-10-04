@@ -405,8 +405,9 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+# Local-only values. In production set them with `npx supabase secrets set` (see README).
+[edge_runtime.secrets]
+CRON_SECRET = "local-dev-cron-secret"
 
 [analytics]
 enabled = false
@@ -438,4 +439,8 @@ enabled = true
 
 # Calendar apps cannot send auth headers; the feed authenticates with a per-member secret token.
 [functions.ics-feed]
+verify_jwt = false
+
+# Called by pg_cron with a shared secret header, not a user JWT.
+[functions.sync-canvas]
 verify_jwt = false

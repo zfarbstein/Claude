@@ -2,14 +2,14 @@
 -- Every check runs inside a transaction that is rolled back.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(46);
+select plan(44);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures (inserted as postgres, which bypasses RLS)
 -- ---------------------------------------------------------------------------
 insert into auth.users (id, email, aud, role, raw_user_meta_data) values
   ('a0000000-0000-0000-0000-000000000001', 'admin@test.local',    'authenticated', 'authenticated', '{"full_name":"Test Admin"}'),
-  ('a0000000-0000-0000-0000-000000000002', 'chair@test.local',    'authenticated', 'authenticated', '{"full_name":"Test Chair"}'),
+  ('a0000000-0000-0000-0000-000000000002', 'brother2@test.local', 'authenticated', 'authenticated', '{"full_name":"Test Brother Two"}'),
   ('a0000000-0000-0000-0000-000000000003', 'brother@test.local',  'authenticated', 'authenticated', '{"full_name":"Test Brother"}'),
   ('a0000000-0000-0000-0000-000000000004', 'am@test.local',       'authenticated', 'authenticated', '{"full_name":"Test AM"}'),
   ('a0000000-0000-0000-0000-000000000005', 'pending@test.local',  'authenticated', 'authenticated', '{"name":"Test Pending"}'),
@@ -27,11 +27,10 @@ select is(
 );
 
 update public.members set status = 'approved', role = 'admin', member_type = 'brother' where id = 'a0000000-0000-0000-0000-000000000001';
-update public.members set status = 'approved', role = 'chair', member_type = 'brother' where id = 'a0000000-0000-0000-0000-000000000002';
+update public.members set status = 'approved', member_type = 'brother' where id = 'a0000000-0000-0000-0000-000000000002';
 update public.members set status = 'approved', member_type = 'brother' where id = 'a0000000-0000-0000-0000-000000000003';
 update public.members set status = 'approved', member_type = 'associate' where id = 'a0000000-0000-0000-0000-000000000004';
 update public.members set status = 'approved', member_type = 'brother', active = false where id = 'a0000000-0000-0000-0000-000000000006';
-insert into calendar.chair_categories (member_id, category) values ('a0000000-0000-0000-0000-000000000002', 'social');
 
 insert into calendar.events (id, title, category, starts_at, ends_at, hidden_from_associates, required, rsvp_enabled) values
   ('e0000000-0000-0000-0000-000000000001', 'Fixture Social',   'social',   now() + interval '2 days', now() + interval '2 days 2 hours', false, false, true),
@@ -120,26 +119,22 @@ select is_empty($$update calendar.events set title = 'hacked' where id = 'e00000
 select throws_ok($$select * from calendar.feed_events(repeat('b', 48))$$, '42501', null, 'feed_events is not callable by members');
 
 -- ---------------------------------------------------------------------------
--- Chair (social)
+-- Admin-only event management
 -- ---------------------------------------------------------------------------
 select set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-000000000002","role":"authenticated"}', true);
+select is_empty($$delete from calendar.events where id = 'e0000000-0000-0000-0000-000000000002' returning id$$, 'brothers cannot delete events');
 
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
 select isnt_empty(
-  $$select * from calendar.create_event('{"title":"Chair Social","category":"social","start_date":"2027-01-15","start_time":"21:00","end_time":"01:00"}')$$,
-  'chairs can create events in their category'
+  $$select * from calendar.create_event('{"title":"Admin Social","category":"social","start_date":"2027-01-15","start_time":"21:00","end_time":"01:00"}')$$,
+  'admins can create events'
 );
 select is(
-  (select ends_at - starts_at from calendar.events where title = 'Chair Social'),
+  (select ends_at - starts_at from calendar.events where title = 'Admin Social'),
   interval '4 hours',
   'an end time before the start time rolls over to the next day'
 );
-select throws_ok(
-  $$select calendar.create_event('{"title":"Chair Rush","category":"rush","start_date":"2027-01-15","start_time":"19:00","end_time":"20:00"}')$$,
-  '42501', null, 'chairs cannot create events outside their category'
-);
-select isnt_empty($$update calendar.events set title = 'Social Renamed' where id = 'e0000000-0000-0000-0000-000000000001' returning id$$, 'chairs can edit events in their category');
-select throws_ok($$update calendar.events set category = 'rush' where id = 'e0000000-0000-0000-0000-000000000001'$$, '42501', null, 'chairs cannot move events into another category');
-select is_empty($$delete from calendar.events where id = 'e0000000-0000-0000-0000-000000000002' returning id$$, 'chairs cannot delete events outside their category');
+select isnt_empty($$update calendar.events set title = 'Social Renamed' where id = 'e0000000-0000-0000-0000-000000000001' returning id$$, 'admins can edit events');
 
 -- ---------------------------------------------------------------------------
 -- Admin
@@ -153,9 +148,9 @@ select is(
   'admins can approve members'
 );
 select is(
-  (select role::text from public.admin_update_member('a0000000-0000-0000-0000-000000000004', p_role => 'chair')),
+  (select role::text from public.admin_update_member('a0000000-0000-0000-0000-000000000004', p_role => 'admin')),
   'member',
-  'associates can never hold a chair/admin role'
+  'pledges can never be admins'
 );
 
 -- DST: weekly Sunday 7 PM across the Nov 1 2026 fall-back stays at 7 PM local.

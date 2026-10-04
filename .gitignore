@@ -41,3 +41,7 @@ supabase/.env
 
 # demo build
 dist-demo
+
+# edge functions
+supabase/functions/.env
+supabase/functions/deno.lock

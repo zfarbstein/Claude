@@ -30,26 +30,65 @@ export type Database = {
         };
         Relationships: [];
       };
-      chair_categories: {
+      dated_items: {
         Row: {
+          all_day: boolean;
+          blocks_availability: boolean | null;
           category: string;
+          course: string | null;
+          created_at: string;
+          dismissed: boolean;
+          ends_at: string;
+          external_uid: string | null;
+          id: string;
+          kind: string;
           member_id: string;
+          semester_id: string;
+          source: string;
+          starts_at: string;
+          title: string;
         };
         Insert: {
+          all_day?: boolean;
+          blocks_availability?: never;
           category: string;
+          course?: string | null;
+          created_at?: string;
+          dismissed?: boolean;
+          ends_at: string;
+          external_uid?: string | null;
+          id?: string;
+          kind: string;
           member_id: string;
+          semester_id: string;
+          source: string;
+          starts_at: string;
+          title: string;
         };
         Update: {
+          all_day?: boolean;
+          blocks_availability?: never;
           category?: string;
+          course?: string | null;
+          created_at?: string;
+          dismissed?: boolean;
+          ends_at?: string;
+          external_uid?: string | null;
+          id?: string;
+          kind?: string;
           member_id?: string;
+          semester_id?: string;
+          source?: string;
+          starts_at?: string;
+          title?: string;
         };
         Relationships: [
           {
-            foreignKeyName: "chair_categories_category_fkey";
-            columns: ["category"];
+            foreignKeyName: "dated_items_semester_id_fkey";
+            columns: ["semester_id"];
             isOneToOne: false;
-            referencedRelation: "categories";
-            referencedColumns: ["key"];
+            referencedRelation: "semesters";
+            referencedColumns: ["id"];
           },
         ];
       };
@@ -202,6 +241,130 @@ export type Database = {
           },
         ];
       };
+      schedule_submissions: {
+        Row: {
+          canvas_feed_url: string | null;
+          canvas_sync_error: string | null;
+          canvas_synced_at: string | null;
+          classes_done_at: string | null;
+          completed: boolean | null;
+          exams_done_at: string | null;
+          member_id: string;
+          obligations_done_at: string | null;
+          semester_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          canvas_feed_url?: string | null;
+          canvas_sync_error?: string | null;
+          canvas_synced_at?: string | null;
+          classes_done_at?: string | null;
+          completed?: never;
+          exams_done_at?: string | null;
+          member_id: string;
+          obligations_done_at?: string | null;
+          semester_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          canvas_feed_url?: string | null;
+          canvas_sync_error?: string | null;
+          canvas_synced_at?: string | null;
+          classes_done_at?: string | null;
+          completed?: never;
+          exams_done_at?: string | null;
+          member_id?: string;
+          obligations_done_at?: string | null;
+          semester_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "schedule_submissions_semester_id_fkey";
+            columns: ["semester_id"];
+            isOneToOne: false;
+            referencedRelation: "semesters";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      schedule_uploads: {
+        Row: {
+          created_at: string;
+          id: string;
+          kind: string;
+          member_id: string;
+          parsed: Json | null;
+          semester_id: string;
+          source_url: string | null;
+          step: string;
+          storage_paths: string[];
+          text_content: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          kind: string;
+          member_id: string;
+          parsed?: Json | null;
+          semester_id: string;
+          source_url?: string | null;
+          step: string;
+          storage_paths?: string[];
+          text_content?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          kind?: string;
+          member_id?: string;
+          parsed?: Json | null;
+          semester_id?: string;
+          source_url?: string | null;
+          step?: string;
+          storage_paths?: string[];
+          text_content?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "schedule_uploads_semester_id_fkey";
+            columns: ["semester_id"];
+            isOneToOne: false;
+            referencedRelation: "semesters";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      semesters: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          ends_on: string;
+          id: string;
+          is_current: boolean;
+          name: string;
+          starts_on: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          ends_on: string;
+          id?: string;
+          is_current?: boolean;
+          name: string;
+          starts_on: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          ends_on?: string;
+          id?: string;
+          is_current?: boolean;
+          name?: string;
+          starts_on?: string;
+        };
+        Relationships: [];
+      };
       settings: {
         Row: {
           id: boolean;
@@ -229,12 +392,74 @@ export type Database = {
         };
         Relationships: [];
       };
+      weekly_blocks: {
+        Row: {
+          category: string;
+          created_at: string;
+          end_time: string;
+          id: string;
+          kind: string;
+          label: string;
+          location: string | null;
+          member_id: string;
+          semester_id: string;
+          start_time: string;
+          weekday: number;
+        };
+        Insert: {
+          category?: string;
+          created_at?: string;
+          end_time: string;
+          id?: string;
+          kind: string;
+          label: string;
+          location?: string | null;
+          member_id: string;
+          semester_id: string;
+          start_time: string;
+          weekday: number;
+        };
+        Update: {
+          category?: string;
+          created_at?: string;
+          end_time?: string;
+          id?: string;
+          kind?: string;
+          label?: string;
+          location?: string | null;
+          member_id?: string;
+          semester_id?: string;
+          start_time?: string;
+          weekday?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "weekly_blocks_semester_id_fkey";
+            columns: ["semester_id"];
+            isOneToOne: false;
+            referencedRelation: "semesters";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
-      can_manage_category: { Args: { p_category: string }; Returns: boolean };
+      _insert_items: {
+        Args: {
+          p_items: Json;
+          p_kinds: string[];
+          p_member_id: string;
+          p_semester_id: string;
+        };
+        Returns: undefined;
+      };
+      apply_feed_sync: {
+        Args: { p_items: Json; p_member_id: string; p_semester_id: string };
+        Returns: number;
+      };
       chapter_timezone: { Args: Record<PropertyKey, never>; Returns: string };
       create_event: {
         Args: { p: Json };
@@ -300,6 +525,57 @@ export type Database = {
           p_tz: string;
         };
         Returns: Record<string, unknown>;
+      };
+      save_schedule_step: {
+        Args: {
+          p_blocks?: Json;
+          p_canvas_url?: string;
+          p_items?: Json;
+          p_step: string;
+        };
+        Returns: {
+          canvas_feed_url: string | null;
+          canvas_sync_error: string | null;
+          canvas_synced_at: string | null;
+          classes_done_at: string | null;
+          completed: boolean | null;
+          exams_done_at: string | null;
+          member_id: string;
+          obligations_done_at: string | null;
+          semester_id: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "schedule_submissions";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      start_semester: {
+        Args: { p_ends_on: string; p_name: string; p_starts_on: string };
+        Returns: {
+          created_at: string;
+          created_by: string | null;
+          ends_on: string;
+          id: string;
+          is_current: boolean;
+          name: string;
+          starts_on: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "semesters";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      submission_counts: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          submitted: number;
+          total: number;
+        }[];
       };
       update_event: {
         Args: { p: Json; p_id: string; p_scope?: string };
@@ -428,11 +704,10 @@ export type Database = {
       };
       is_admin: { Args: Record<PropertyKey, never>; Returns: boolean };
       is_brother: { Args: Record<PropertyKey, never>; Returns: boolean };
-      is_chair: { Args: Record<PropertyKey, never>; Returns: boolean };
       is_member: { Args: Record<PropertyKey, never>; Returns: boolean };
     };
     Enums: {
-      member_role: "admin" | "chair" | "member";
+      member_role: "admin" | "member";
       member_status: "pending" | "approved" | "rejected";
       member_type: "brother" | "associate";
     };
@@ -568,7 +843,7 @@ export const Constants = {
   },
   public: {
     Enums: {
-      member_role: ["admin", "chair", "member"],
+      member_role: ["admin", "member"],
       member_status: ["pending", "approved", "rejected"],
       member_type: ["brother", "associate"],
     },

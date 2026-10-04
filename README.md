@@ -8,8 +8,8 @@ Mobile-first PWA for chapter events, availability, and attendance. It's the firs
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 1 | Auth (Google + email/password, password reset, approval), roles, calendar grid, events, RSVPs, .ics feed | **Done** |
-| 2 | Schedule wizard, AI parsing, Canvas/ICS sync | |
+| 1 | Auth (Google + email/password, password reset, approval), admin / brother / pledge views, calendar grid, events, RSVPs, .ics feed | **Done** |
+| 2 | Schedule wizard, AI parsing, Canvas/ICS sync, semesters | **Done** |
 | 3 | Availability heatmap, night toggles, Members tab | |
 | 4 | Attendance (rotating QR + roster), excuse form | |
 | 5 | Notifications, admin panel, Excel export, hub Apps menu | |
@@ -30,16 +30,18 @@ The stand-in follows the same permission rules as the RLS policies. The real rul
 ```
 public.members          shared roster (id, name, email, role, member_type, pledge_class, status, active)
 public.is_member()      helpers any hub app can use in RLS:
-public.is_brother()       approved + active (+ brother / admin / chair)
+public.is_brother()       approved + active (+ brother / admin)
 public.is_admin()
-public.is_chair()
 public.admin_update_member(...)   the only way to change role / type / status / active
 
-calendar.*              this app's tables: settings, categories, chair_categories,
-                        event_series, events, rsvps, feed_tokens
+calendar.*              this app's tables: settings, categories, event_series, events, rsvps,
+                        feed_tokens, semesters, schedule_submissions, weekly_blocks,
+                        dated_items, schedule_uploads
 ```
 
-- **Roles:** `role` is `admin | chair | member`; `member_type` is `brother | associate`. Associates are always `member`. Chairs manage events only in the categories assigned in `calendar.chair_categories`.
+- **Three views:** admin (exec), brother, pledge. Stored as `role` (`admin | member`) plus `member_type` (`brother | associate`); pledges are always `member`. Only admins create, edit and delete chapter events.
+- **Schedules (phase 2):** `calendar.semesters`, `schedule_submissions`, `weekly_blocks` (classes, weekly obligations), `dated_items` (exams block availability, deadlines don't), `schedule_uploads` (originals + parser output for admin review, files in the private `schedule-uploads` bucket). Members only write through `calendar.save_schedule_step()`, after confirming the parsed list. The calendar stays locked until all three steps are saved for the current semester.
+- **Edge Functions:** `parse-schedule` (Claude reads typed text and photos), `import-calendar` (Canvas feed, .ics file or link), `sync-canvas` (daily, via pg_cron + pg_net), `ics-feed`.
 - **Sign-ups** create a `pending` member (as an associate, the most restricted type). Pending, rejected, and inactive members can read nothing but their own member row.
 - **Events hidden from Associate Members** are filtered by RLS, so they never leave the database for an AM: not in the UI, the API, or the .ics feed.
 - **Recurring events** are stored as one row per occurrence sharing a `series_id`, so RSVPs, attendance, and reminders always point at a concrete event. Repeat rules are expanded in Postgres in `America/New_York`, so 7 PM stays 7 PM across DST.
@@ -61,9 +63,9 @@ npm run dev                   # http://localhost:5173
 | Email | Role |
 | --- | --- |
 | president@example.com, secretary@example.com | Admin |
-| social@example.com, philanthropy@example.com, rush@example.com | Chair (Socials / Philanthropy / Rush) |
-| brother1@example.com … brother9@example.com | Brother |
-| am1@example.com … am5@example.com | Associate Member |
+| brother1@example.com … brother9@example.com (+ social@, philanthropy@, rush@) | Brother |
+| am1@example.com … am5@example.com | Pledge |
+| brother2@, brother9@, am5@ | Haven't set up their schedule yet (see the setup wizard) |
 | pending1@example.com, pending2@example.com | Pending approval |
 
 Local email (confirmations, resets) goes to Mailpit at http://127.0.0.1:54324, not to real inboxes.
@@ -76,9 +78,10 @@ After changing SQL, regenerate types with `npm run db:types`.
 
 | Command | What it covers |
 | --- | --- |
-| `npm test` | Unit tests: chapter-time date math (DST, overnight events), week layout, event form validation, permissions, .ics output, category contrast (WCAG AA) |
-| `npm run test:db` | pgTAP: RLS for every role (pending, AM, brother, chair, admin, inactive), privilege escalation, RSVP rules, recurrence, feeds |
-| `npm run test:e2e` | Playwright (mobile Chrome) against local Supabase + Mailpit: full password reset (request → email → link on a fresh device → new password → sign in; single-use link), sign-up → confirm → pending → admin approval, event creation and AM visibility, RSVPs, chair category limits |
+| `npm test` | Unit tests: chapter-time date math (DST, overnight events), event form validation, permissions, .ics output and parsing (Canvas UTC times, exam keywords), AI result clean-up, category contrast (WCAG AA) |
+| `npm run test:db` | pgTAP: RLS for every role (pending, pledge, brother, admin, inactive), privilege escalation, RSVP rules, recurrence, feeds, schedule saving, Canvas sync, upload folders |
+| `npm run test:e2e` | Playwright (mobile Chrome) against local Supabase + Mailpit: full password reset (request → email → link on a fresh device → new password → sign in; single-use link), sign-up → confirm → pending → approval → schedule setup, the three-step wizard (reading, fixing rows, .ics import, gate), event creation and pledge visibility, RSVPs |
+| `npm run check:functions` | Type-checks the Edge Functions with Deno |
 
 `npm run test:e2e` needs `npx supabase start` running. Set `E2E_PROD=1` to test the production build (with service worker) instead of the dev server. CI (`.github/workflows/ci.yml`) runs all three on every push.
 
@@ -166,15 +169,32 @@ UF Gatorlink mail is Microsoft 365, so most members will use a personal Google a
 2. Add the `VITE_*` variables above. Deploy, then add your custom domain.
 3. `vercel.json` already handles the SPA fallback, service-worker caching headers, and security headers.
 
-### 5. Anthropic API key (phase 2)
+### 5. Anthropic API key (schedule reading)
 
 ```bash
 npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+npx supabase functions deploy parse-schedule import-calendar
 ```
 
-It's read only inside Edge Functions. The browser never sees it.
+It's read only inside the `parse-schedule` Edge Function; the browser never sees it. Each member can run at most 25 readings a day. Locally, put `ANTHROPIC_API_KEY=...` in `supabase/functions/.env` (gitignored) and restart Supabase; without it, the app asks members to type their schedule into the list instead.
 
-### 6. Web Push VAPID keys (phase 5)
+### 6. Daily Canvas sync
+
+```bash
+npx supabase secrets set CRON_SECRET=<long random string>
+npx supabase functions deploy sync-canvas --no-verify-jwt
+```
+
+Then, in the SQL editor:
+
+```sql
+select vault.create_secret('https://<ref>.supabase.co', 'project_url');
+select vault.create_secret('<the same CRON_SECRET>', 'cron_secret');
+```
+
+The `sync-canvas-feeds` pg_cron job (created by the schedules migration) runs every morning and updates each member's exams and deadlines from their saved Canvas feed. It keeps the member's exam/deadline choices and removals, and records failures in `schedule_submissions.canvas_sync_error`.
+
+### 7. Web Push VAPID keys (phase 5)
 
 ```bash
 npx web-push generate-vapid-keys

@@ -9,7 +9,7 @@ export function AppLayout() {
   const { member } = useAuth()
   const items = [
     { to: '/', label: 'Calendar', icon: CalendarDays, end: true },
-    ...(isAdmin(member) ? [{ to: '/admin/members', label: 'Admin', icon: ShieldCheck, end: false }] : []),
+    ...(isAdmin(member) ? [{ to: '/admin', label: 'Admin', icon: ShieldCheck, end: false }] : []),
     { to: '/me', label: 'Me', icon: UserRound, end: false },
   ]
   return (

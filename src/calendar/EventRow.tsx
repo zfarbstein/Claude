@@ -1,7 +1,7 @@
 import { EyeOff, MapPin } from 'lucide-react'
 import { Badge } from '../components/ui'
 import { formatTimeRange } from '../lib/time'
-import type { CalendarEvent, Category, RsvpStatus } from '../lib/types'
+import type { Category, DisplayEvent, RsvpStatus } from '../lib/types'
 import { RSVP_LABELS } from './labels'
 
 export function EventRow({
@@ -11,7 +11,7 @@ export function EventRow({
   showHiddenFlag,
   onOpen,
 }: {
-  event: CalendarEvent
+  event: DisplayEvent
   category: Category | undefined
   rsvp: RsvpStatus | undefined
   showHiddenFlag: boolean
@@ -43,10 +43,11 @@ export function EventRow({
           {event.required && <Badge className="bg-blue-100 text-blue-900">Required</Badge>}
           {showHiddenFlag && event.hidden_from_associates && (
             <Badge className="bg-amber-100 text-amber-900">
-              <EyeOff aria-hidden className="size-3" /> Hidden from AMs
+              <EyeOff aria-hidden className="size-3" /> Hidden from pledges
             </Badge>
           )}
           {rsvp && <Badge className="bg-green-100 text-green-900">{RSVP_LABELS[rsvp]}</Badge>}
+          {event.personal && <Badge className="bg-slate-100 text-slate-800">Your schedule</Badge>}
         </span>
       </span>
     </button>

@@ -19,7 +19,8 @@
     "icons": "node scripts/generate-icons.mjs",
     "deploy:staging": "node scripts/deploy-staging.mjs",
     "build:demo": "node scripts/build-demo.mjs",
-    "test:demo": "playwright test -c playwright.demo.config.ts"
+    "test:demo": "playwright test -c playwright.demo.config.ts",
+    "check:functions": "cd supabase/functions && deno check ics-feed/index.ts parse-schedule/index.ts import-calendar/index.ts sync-canvas/index.ts"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
@@ -42,6 +43,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "deno": "^2.9.6",
     "jsdom": "^29.1.1",
     "oxlint": "^1.81.0",
     "sharp": "^0.35.5",

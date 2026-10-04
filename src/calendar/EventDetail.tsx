@@ -1,20 +1,21 @@
-import { CalendarClock, EyeOff, MapPin, Pencil, Repeat, Trash2 } from 'lucide-react'
+import { CalendarClock, EyeOff, MapPin, Pencil, Repeat, Trash2, UserRound } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { Sheet } from '../components/Sheet'
 import { useToast } from '../components/Toast'
 import { Alert, Badge, Button } from '../components/ui'
 import { cx } from '../lib/cx'
-import { canManageEvent, canRsvp, isBrother } from '../lib/permissions'
+import { canManageEvents, canRsvp, isBrother } from '../lib/permissions'
 import { formatLongDay, formatTimeRange } from '../lib/time'
-import type { CalendarEvent, Category, RsvpStatus } from '../lib/types'
+import type { CalendarEvent, Category, DisplayEvent, RsvpStatus } from '../lib/types'
 import { useDeleteEvent, useEventRsvps, useSetRsvp } from './api'
 import { RSVP_LABELS } from './labels'
 
 const RSVP_ORDER: RsvpStatus[] = ['going', 'maybe', 'not_going']
 
 interface EventDetailProps {
-  event: CalendarEvent | null
+  event: DisplayEvent | null
   category: Category | undefined
   myRsvp: RsvpStatus | undefined
   onClose: () => void
@@ -29,13 +30,14 @@ export function EventDetail({ event, category, myRsvp, onClose, onEdit }: EventD
   )
 }
 
-function EventDetailBody({ event, category, myRsvp, onClose, onEdit }: EventDetailProps & { event: CalendarEvent }) {
-  const { member, chairCategories } = useAuth()
+function EventDetailBody({ event, category, myRsvp, onClose, onEdit }: EventDetailProps & { event: DisplayEvent }) {
+  const { member } = useAuth()
   const toast = useToast()
   const brother = isBrother(member)
-  const manage = canManageEvent(member, chairCategories, event)
-  const rsvpOpen = canRsvp(event)
-  const rsvps = useEventRsvps(event.id, brother && event.rsvp_enabled && !event.required)
+  const personal = !!event.personal
+  const manage = !personal && canManageEvents(member)
+  const rsvpOpen = !personal && canRsvp(event)
+  const rsvps = useEventRsvps(event.id, !personal && brother && event.rsvp_enabled && !event.required)
   const setRsvp = useSetRsvp(member!.id)
   const del = useDeleteEvent()
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -71,7 +73,12 @@ function EventDetailBody({ event, category, myRsvp, onClose, onEdit }: EventDeta
         {event.required && <Badge className="bg-blue-100 text-blue-900">Required</Badge>}
         {brother && event.hidden_from_associates && (
           <Badge className="bg-amber-100 text-amber-900">
-            <EyeOff aria-hidden className="size-3" /> Hidden from Associate Members
+            <EyeOff aria-hidden className="size-3" /> Hidden from pledges
+          </Badge>
+        )}
+        {personal && (
+          <Badge className="bg-slate-100 text-slate-800">
+            <UserRound aria-hidden className="size-3" /> Only you see this
           </Badge>
         )}
       </div>
@@ -114,6 +121,15 @@ function EventDetailBody({ event, category, myRsvp, onClose, onEdit }: EventDeta
       </dl>
 
       {event.description && <p className="whitespace-pre-wrap text-slate-800">{event.description}</p>}
+
+      {personal && (
+        <p className="text-slate-700">
+          From your schedule.{' '}
+          <Link to={event.personal!.kind === 'exam' ? '/setup?step=2&edit=1' : '/setup?step=3&edit=1'} className="font-semibold text-brand-700 underline">
+            Edit it
+          </Link>
+        </p>
+      )}
 
       {event.required && (
         <Alert kind="info">This is a required chapter event. Attendance is taken. If you can&rsquo;t make it, submit an excuse.</Alert>

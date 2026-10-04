@@ -89,6 +89,20 @@ export function isMultiDayOrAllDay(e: TimedRange): boolean {
 
 const timeFmt = (d: Date) => (d.getMinutes() === 0 ? format(d, 'h a') : format(d, 'h:mm a'))
 
+/** Compact time for calendar chips: "7p", "7:30p", "11a". */
+export function shortTime(value: Date | string): string {
+  const d = inChapterTz(value)
+  return format(d, d.getMinutes() === 0 ? 'h' : 'h:mm') + (d.getHours() < 12 ? 'a' : 'p')
+}
+
+/** "7–8:30p", "11a–1p" or "" for all-day events. */
+export function shortRange(e: TimedRange): string {
+  if (e.all_day) return ''
+  const start = shortTime(e.starts_at)
+  const end = shortTime(e.ends_at)
+  return start.slice(-1) === end.slice(-1) ? `${start.slice(0, -1)}–${end}` : `${start}–${end}`
+}
+
 /** e.g. "7 – 8:30 PM", "9 PM – 1 AM", "All day", "Fri 8 PM – Sun 2 PM" */
 export function formatTimeRange(e: TimedRange): string {
   const start = inChapterTz(e.starts_at)
@@ -125,58 +139,4 @@ export function toFormParts(e: TimedRange): { start_date: string; end_date: stri
     start_time: format(start, 'HH:mm'),
     end_time: format(end, 'HH:mm'),
   }
-}
-
-export interface DayLayoutItem<T> {
-  event: T
-  /** minutes from local midnight, clamped to the day */
-  top: number
-  height: number
-  column: number
-  columns: number
-}
-
-/** Positions timed events inside one day column, splitting overlapping events side by side. */
-export function layoutDay<T extends TimedRange>(events: T[], day: Date, minHeight = 20): DayLayoutItem<T>[] {
-  const dayStart = startOfDay(inChapterTz(day))
-  const dayEnd = addDays(dayStart, 1)
-  const minutesInto = (t: Date) => {
-    if (t.getTime() <= dayStart.getTime()) return 0
-    if (t.getTime() >= dayEnd.getTime()) return 24 * 60
-    const local = inChapterTz(t)
-    return local.getHours() * 60 + local.getMinutes()
-  }
-  const items = events
-    .filter((e) => !e.all_day)
-    .map((event) => {
-      const top = minutesInto(new Date(event.starts_at))
-      const bottom = minutesInto(new Date(event.ends_at))
-      return { event, top, height: Math.max(bottom - top, minHeight), column: 0, columns: 1 }
-    })
-    .filter((i) => i.top < 24 * 60)
-    .sort((a, b) => a.top - b.top || b.height - a.height)
-
-  let cluster: typeof items = []
-  let clusterEnd = -1
-  const flush = () => {
-    const colEnds: number[] = []
-    for (const item of cluster) {
-      let col = colEnds.findIndex((end) => end <= item.top)
-      if (col === -1) col = colEnds.length
-      colEnds[col] = item.top + item.height
-      item.column = col
-    }
-    for (const item of cluster) item.columns = colEnds.length
-  }
-  for (const item of items) {
-    if (cluster.length && item.top >= clusterEnd) {
-      flush()
-      cluster = []
-      clusterEnd = -1
-    }
-    cluster.push(item)
-    clusterEnd = Math.max(clusterEnd, item.top + item.height)
-  }
-  if (cluster.length) flush()
-  return items
 }

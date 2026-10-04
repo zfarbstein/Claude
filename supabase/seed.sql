@@ -5,9 +5,9 @@ declare
   v_people jsonb := '[
     {"email":"president@example.com","name":"Alex Rivera","role":"admin","type":"brother","class":"Alpha Beta","status":"approved"},
     {"email":"secretary@example.com","name":"Jordan Lee","role":"admin","type":"brother","class":"Alpha Gamma","status":"approved"},
-    {"email":"social@example.com","name":"Sam Patel","role":"chair","type":"brother","class":"Alpha Gamma","status":"approved","chair":["social"]},
-    {"email":"philanthropy@example.com","name":"Chris Nguyen","role":"chair","type":"brother","class":"Alpha Delta","status":"approved","chair":["philanthropy"]},
-    {"email":"rush@example.com","name":"Taylor Brooks","role":"chair","type":"brother","class":"Alpha Delta","status":"approved","chair":["rush"]},
+    {"email":"social@example.com","name":"Sam Patel","role":"member","type":"brother","class":"Alpha Gamma","status":"approved"},
+    {"email":"philanthropy@example.com","name":"Chris Nguyen","role":"member","type":"brother","class":"Alpha Delta","status":"approved"},
+    {"email":"rush@example.com","name":"Taylor Brooks","role":"member","type":"brother","class":"Alpha Delta","status":"approved"},
     {"email":"brother1@example.com","name":"Marcus Johnson","role":"member","type":"brother","class":"Alpha Beta","status":"approved"},
     {"email":"brother2@example.com","name":"Ethan Kim","role":"member","type":"brother","class":"Alpha Beta","status":"approved"},
     {"email":"brother3@example.com","name":"Diego Hernandez","role":"member","type":"brother","class":"Alpha Gamma","status":"approved"},
@@ -54,8 +54,6 @@ begin
       pledge_class = p ->> 'class',
       approved_at = case when p ->> 'status' = 'approved' then now() end
     where id = v_id;
-    insert into calendar.chair_categories (member_id, category)
-    select v_id, c from jsonb_array_elements_text(coalesce(p -> 'chair', '[]')) as c;
   end loop;
 end $$;
 
@@ -102,4 +100,61 @@ begin
     'title', 'Spring kickoff', 'category', 'required', 'start_date', '2027-01-10',
     'start_time', '18:00', 'end_time', '19:30', 'location', 'Chapter House'
   ));
+end $$;
+
+-- Current semester (relative to today) and completed schedules for most demo members.
+-- Left without a schedule on purpose: brother2, brother9 and am5 (they see the setup wizard).
+do $$
+declare
+  v_today date := (now() at time zone 'America/New_York')::date;
+  v_sem uuid;
+  m record;
+  n int := 0;
+  v_tz text := 'America/New_York';
+begin
+  insert into calendar.semesters (name, starts_on, ends_on, is_current)
+  values (
+    case when extract(month from v_today) between 8 and 12 then 'Fall ' when extract(month from v_today) <= 5 then 'Spring ' else 'Summer ' end
+      || extract(year from v_today)::text,
+    v_today - 45, v_today + 75, true
+  )
+  returning id into v_sem;
+
+  for m in
+    select id, email from public.members
+    where status = 'approved' and email not in ('brother2@example.com', 'brother9@example.com', 'am5@example.com')
+    order by email
+  loop
+    n := n + 1;
+    insert into calendar.weekly_blocks (member_id, semester_id, kind, category, weekday, start_time, end_time, label, location)
+    select m.id, v_sem, 'class', 'school', d, t.s, t.e, t.label, t.loc
+    from (values
+      ('09:35'::time, '10:25'::time, 'MAC2312 Lecture', 'LIT 109', array[1, 3, 5]),
+      ('11:45'::time, '12:35'::time, 'COP3502 Lecture', 'CSE A101', array[1, 3, 5]),
+      ('13:55'::time, '14:45'::time, 'ECO2023 Lecture', 'MAT 18', array[2, 4]),
+      ('15:00'::time, '16:55'::time, 'CHM2045L Lab', 'JHH 130', array[3])
+    ) as t(s, e, label, loc, days)
+    cross join lateral unnest(t.days) as d
+    where (n + array_position(array['MAC2312 Lecture', 'COP3502 Lecture', 'ECO2023 Lecture', 'CHM2045L Lab'], t.label)) % 3 <> 0;
+
+    if n % 3 = 0 then
+      insert into calendar.weekly_blocks (member_id, semester_id, kind, category, weekday, start_time, end_time, label, location)
+      values (m.id, v_sem, 'obligation', 'personal', 4, '18:00', '22:00', 'Shift at Publix', 'Publix on 13th St');
+    elsif n % 3 = 1 then
+      insert into calendar.weekly_blocks (member_id, semester_id, kind, category, weekday, start_time, end_time, label, location)
+      values (m.id, v_sem, 'obligation', 'school', 2, '19:00', '20:30', 'Club soccer practice', 'Graham Field');
+    end if;
+
+    insert into calendar.dated_items (member_id, semester_id, kind, category, title, course, starts_at, ends_at, source)
+    values
+      (m.id, v_sem, 'exam', 'exam', 'Exam 2', 'COP3502',
+        ((v_today + 4 + n % 3) + time '20:20') at time zone v_tz, ((v_today + 4 + n % 3) + time '22:10') at time zone v_tz, 'manual'),
+      (m.id, v_sem, 'exam', 'exam', 'Midterm', 'MAC2312',
+        ((v_today + 10 + n % 4) + time '20:20') at time zone v_tz, ((v_today + 10 + n % 4) + time '22:10') at time zone v_tz, 'manual'),
+      (m.id, v_sem, 'deadline', 'school', 'Project 3 due', 'COP3502',
+        ((v_today + 6) + time '23:59') at time zone v_tz, ((v_today + 6) + time '23:59') at time zone v_tz, 'manual');
+
+    insert into calendar.schedule_submissions (member_id, semester_id, classes_done_at, exams_done_at, obligations_done_at)
+    values (m.id, v_sem, now(), now(), now());
+  end loop;
 end $$;

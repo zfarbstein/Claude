@@ -6,14 +6,23 @@
 // supabase/tests; keep this file in step with them when the schema changes.
 import { TZDate } from '@date-fns/tz'
 import seedSql from '../../supabase/seed.sql?raw'
+import { parseIcs, scheduleFromCanvas, scheduleFromIcs } from '../../supabase/functions/_shared/ical'
+import { buildSchedulePrompt, normalizeAiSchedule } from '../../supabase/functions/_shared/schedule-ai'
+import type { ParsedSchedule, ScheduleStep } from '../../supabase/functions/_shared/schedule-types'
 import { DEFAULT_CATEGORIES } from '../lib/categories'
 import { CHAPTER_TZ, dayKey } from '../lib/time'
-import type { CalendarEvent, Category, Member } from '../lib/types'
+import type { CalendarEvent, Category, DatedItemRow, Member, Semester, Submission, WeeklyBlockRow } from '../lib/types'
+
+declare global {
+  interface Window {
+    claude?: { use(name: string): Promise<unknown> }
+  }
+}
 
 export const DEMO_URL = 'https://demo.chapter-calendar.invalid'
 export const DEMO_ANON_KEY = 'demo-anon-key'
 export const DEMO_PASSWORD = 'Password123'
-const STORAGE_KEY = 'chapter-calendar-demo-v1'
+const STORAGE_KEY = 'chapter-calendar-demo-v2'
 const HOUR = 3600_000
 
 type Row = Record<string, unknown>
@@ -58,13 +67,17 @@ interface State {
   refresh: Record<string, string>
   members: Member[]
   categories: Category[]
-  chair_categories: { member_id: string; category: string }[]
   settings: { id: boolean; timezone: string; night_start: string; night_end: string; secretary_email: string | null; updated_at: string }
   event_series: Series[]
   events: CalendarEvent[]
   rsvps: { event_id: string; member_id: string; status: string; updated_at: string }[]
   feed_tokens: { member_id: string; token: string; created_at: string }[]
   outbox: DemoEmail[]
+  semesters: Semester[]
+  schedule_submissions: Submission[]
+  weekly_blocks: WeeklyBlockRow[]
+  dated_items: DatedItemRow[]
+  schedule_uploads: { id: string; member_id: string; semester_id: string; step: string; kind: string; text_content: string | null; storage_paths: string[]; source_url: string | null; parsed: unknown; created_at: string }[]
 }
 
 interface SeedPerson {
@@ -74,7 +87,6 @@ interface SeedPerson {
   type: Member['member_type']
   class: string | null
   status: Member['status']
-  chair?: string[]
 }
 
 export const DEMO_PEOPLE: SeedPerson[] = JSON.parse(
@@ -142,10 +154,8 @@ const isMember = (ctx: Ctx) => {
 }
 const isBrother = (ctx: Ctx) => isMember(ctx) && me(ctx)!.member_type === 'brother'
 const isAdmin = (ctx: Ctx) => isMember(ctx) && me(ctx)!.role === 'admin'
-const isChair = (ctx: Ctx) => isMember(ctx) && me(ctx)!.role === 'chair'
-const canManage = (ctx: Ctx, category: unknown) =>
-  isAdmin(ctx) || (isChair(ctx) && state.chair_categories.some((c) => c.member_id === ctx.uid && c.category === category))
 const eventVisible = (ctx: Ctx, e: Row) => isMember(ctx) && (!e.hidden_from_associates || isBrother(ctx))
+const ownOrAdmin = (ctx: Ctx, r: Row) => r.member_id === ctx.uid || isAdmin(ctx)
 
 // ---------------------------------------------------------------------------
 // Tables
@@ -206,27 +216,20 @@ const TABLES: Record<string, TableDef> = {
     select: isMember,
     update: { using: isAdmin, check: isAdmin },
   },
-  'calendar.chair_categories': {
-    rows: () => state.chair_categories as unknown as Row[],
-    key: ['member_id', 'category'],
-    select: isMember,
-    insert: isAdmin,
-    delete: isAdmin,
-  },
   'calendar.event_series': {
     rows: () => state.event_series as unknown as Row[],
     key: ['id'],
     select: isMember,
-    insert: (ctx) => isAdmin(ctx) || isChair(ctx),
-    delete: (ctx) => isAdmin(ctx) || isChair(ctx),
+    insert: isAdmin,
+    delete: isAdmin,
   },
   'calendar.events': {
     rows: () => state.events as unknown as Row[],
     key: ['id'],
     select: eventVisible,
-    insert: (ctx, r) => canManage(ctx, r.category),
-    update: { using: (ctx, r) => canManage(ctx, r.category), check: (ctx, r) => canManage(ctx, r.category) },
-    delete: (ctx, r) => canManage(ctx, r.category),
+    insert: isAdmin,
+    update: { using: isAdmin, check: isAdmin },
+    delete: isAdmin,
     defaults: (ctx) => ({
       id: uuid(),
       series_id: null,
@@ -259,6 +262,11 @@ const TABLES: Record<string, TableDef> = {
     key: ['member_id'],
     select: () => false,
   },
+  'calendar.semesters': { rows: () => state.semesters as unknown as Row[], key: ['id'], select: isMember },
+  'calendar.schedule_submissions': { rows: () => state.schedule_submissions as unknown as Row[], key: ['member_id', 'semester_id'], select: ownOrAdmin },
+  'calendar.weekly_blocks': { rows: () => state.weekly_blocks as unknown as Row[], key: ['id'], select: ownOrAdmin },
+  'calendar.dated_items': { rows: () => state.dated_items as unknown as Row[], key: ['id'], select: ownOrAdmin },
+  'calendar.schedule_uploads': { rows: () => state.schedule_uploads as unknown as Row[], key: ['id'], select: ownOrAdmin },
 }
 
 function tableFor(schema: string, name: string, ctx: Ctx): TableDef {
@@ -454,10 +462,11 @@ export function expandRecurrence(
   return out
 }
 
+/** Gainesville wall-clock time -> UTC Date (plain Date, so toISOString() ends in Z). */
 function localInstant(date: string, time: string) {
   const [y, m, d] = date.split('-').map(Number)
   const [hh, mm] = time.split(':').map(Number)
-  return new TZDate(y, m - 1, d, hh, mm, CHAPTER_TZ)
+  return new Date(new TZDate(y, m - 1, d, hh, mm, CHAPTER_TZ).getTime())
 }
 
 function localRange(date: string, span: number, start: string, end: string, allDay: boolean) {
@@ -504,7 +513,7 @@ function createEvent(ctx: Ctx, p: Row): Row[] {
     const interval = rec.interval === undefined || rec.interval === null || rec.interval === '' ? 1 : Number(rec.interval)
     dates = expandRecurrence(start, String(rec.freq), interval, byWeekday, until, count)
     if (dates.length === 0) throw invalid('That repeat rule does not produce any dates')
-    if (!ctx.service && !(isAdmin(ctx) || isChair(ctx))) throw denied('event_series')
+    if (!ctx.service && !isAdmin(ctx)) throw denied('event_series')
     seriesId = uuid()
     state.event_series.push({
       id: seriesId,
@@ -554,6 +563,139 @@ function updateEvent(ctx: Ctx, id: string, p: Row, scope: string): Row[] {
   return updates.map(({ next }) => next)
 }
 
+// ---------------------------------------------------------------------------
+// Schedules (ports of calendar.start_semester / save_schedule_step / submission_counts)
+// ---------------------------------------------------------------------------
+const currentSemester = () => state.semesters.find((s) => s.is_current) ?? null
+
+function startSemester(ctx: Ctx, a: Row): Semester {
+  if (!isAdmin(ctx)) throw new ApiError(403, '42501', 'Only admins can start a semester')
+  const name = String(a.p_name ?? '').trim()
+  const startsOn = String(a.p_starts_on ?? '')
+  const endsOn = String(a.p_ends_on ?? '')
+  if (!name) throw invalid('Name the semester')
+  if (!DATE_RE.test(startsOn) || !DATE_RE.test(endsOn) || endsOn <= startsOn) throw invalid('The semester must end after it starts')
+  state.semesters.forEach((s) => (s.is_current = false))
+  const row: Semester = { id: uuid(), name, starts_on: startsOn, ends_on: endsOn, is_current: true, created_by: ctx.uid, created_at: nowIso() }
+  state.semesters.push(row)
+  return row
+}
+
+function submissionCounts(ctx: Ctx) {
+  if (!isMember(ctx)) return []
+  const sem = currentSemester()
+  const active = state.members.filter((m) => m.status === 'approved' && m.active)
+  const submitted = active.filter((m) => state.schedule_submissions.some((s) => s.member_id === m.id && s.semester_id === sem?.id && s.completed)).length
+  return [{ submitted, total: active.length }]
+}
+
+const plusMinute = (t: string) => {
+  const [h, m] = t.split(':').map(Number)
+  const total = (h * 60 + m + 1) % 1440
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+function insertItems(memberId: string, semesterId: string, items: Row[], kinds: string[]) {
+  for (const i of items) {
+    if (!kinds.includes(String(i.kind))) continue
+    const date = String(i.date ?? '')
+    if (!DATE_RE.test(date)) throw invalid('Pick a date for every item')
+    const title = String(i.title ?? '').trim().slice(0, 160)
+    if (!title) throw new ApiError(400, '23514', 'Every item needs a name')
+    const start = typeof i.start === 'string' && i.start ? i.start.slice(0, 5) : null
+    const end = typeof i.end === 'string' && i.end ? i.end.slice(0, 5) : null
+    const allDay = i.all_day === true || !start
+    const r = localRange(date, 0, start ?? '00:00', end ?? (start ? plusMinute(start) : '00:00'), allDay)
+    const ends_at =
+      i.kind === 'deadline' && !end ? r.starts_at : i.kind === 'exam' && !end && !allDay ? new Date(Date.parse(r.starts_at) + 2 * HOUR).toISOString() : r.ends_at
+    state.dated_items.push({
+      id: uuid(),
+      member_id: memberId,
+      semester_id: semesterId,
+      kind: String(i.kind),
+      category: i.kind === 'exam' ? 'exam' : i.category === 'school' || i.category === 'personal' ? String(i.category) : i.kind === 'deadline' ? 'school' : 'personal',
+      title,
+      course: typeof i.course === 'string' && i.course.trim() ? i.course.trim().slice(0, 60) : null,
+      starts_at: r.starts_at,
+      ends_at,
+      all_day: allDay,
+      blocks_availability: i.kind !== 'deadline',
+      source: typeof i.source === 'string' && i.source ? i.source : 'manual',
+      external_uid: typeof i.external_uid === 'string' && i.external_uid ? i.external_uid : null,
+      dismissed: i.dismissed === true,
+      created_at: nowIso(),
+    })
+  }
+}
+
+function saveScheduleStep(ctx: Ctx, a: Row): Submission {
+  if (!isMember(ctx)) throw new ApiError(403, '42501', 'Not allowed')
+  const sem = currentSemester()
+  if (!sem) throw new ApiError(404, 'P0002', 'There is no current semester yet. Ask an admin to start one.')
+  const step = String(a.p_step)
+  if (!['classes', 'exams', 'obligations'].includes(step)) throw invalid('Unknown step')
+  const blocks = Array.isArray(a.p_blocks) ? (a.p_blocks as Row[]) : []
+  const items = Array.isArray(a.p_items) ? (a.p_items as Row[]) : []
+  const canvas = typeof a.p_canvas_url === 'string' ? a.p_canvas_url.trim() : ''
+  if (canvas && !/^https:\/\/[^/\s]+\/feeds\/calendars\/\S+$/.test(canvas)) throw invalid('That doesn\u2019t look like a Canvas calendar feed link')
+  const uid = ctx.uid!
+  const kind = step === 'classes' ? 'class' : step === 'obligations' ? 'obligation' : null
+  const itemKinds = step === 'exams' ? ['exam', 'deadline'] : step === 'obligations' ? ['obligation'] : []
+
+  const keepBlocks = state.weekly_blocks.filter((b) => !(b.member_id === uid && b.semester_id === sem.id && b.kind === kind))
+  const keepItems = state.dated_items.filter((i) => !(i.member_id === uid && i.semester_id === sem.id && itemKinds.includes(i.kind)))
+  const previous = { blocks: state.weekly_blocks, items: state.dated_items }
+  state.weekly_blocks = keepBlocks
+  state.dated_items = keepItems
+  try {
+    if (kind) {
+      for (const b of blocks) {
+        const start = String(b.start ?? '').slice(0, 5)
+        const end = String(b.end ?? '').slice(0, 5)
+        const label = String(b.label ?? '').trim().slice(0, 120)
+        const weekday = Number(b.weekday)
+        if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6 || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end) || end <= start || !label) {
+          throw new ApiError(400, '23514', 'Every row needs a day, a name, and an end time after its start time')
+        }
+        state.weekly_blocks.push({
+          id: uuid(),
+          member_id: uid,
+          semester_id: sem.id,
+          kind,
+          category: kind === 'class' ? 'school' : b.category === 'school' ? 'school' : 'personal',
+          weekday,
+          start_time: `${start}:00`,
+          end_time: `${end}:00`,
+          label,
+          location: typeof b.location === 'string' && b.location.trim() ? b.location.trim().slice(0, 120) : null,
+          created_at: nowIso(),
+        })
+      }
+    }
+    insertItems(uid, sem.id, items, itemKinds)
+  } catch (e) {
+    state.weekly_blocks = previous.blocks
+    state.dated_items = previous.items
+    throw e
+  }
+
+  let sub = state.schedule_submissions.find((s) => s.member_id === uid && s.semester_id === sem.id)
+  if (!sub) {
+    sub = { member_id: uid, semester_id: sem.id, classes_done_at: null, exams_done_at: null, obligations_done_at: null, completed: false, canvas_feed_url: null, canvas_synced_at: null, canvas_sync_error: null, updated_at: nowIso() }
+    state.schedule_submissions.push(sub)
+  }
+  if (step === 'classes') sub.classes_done_at = nowIso()
+  if (step === 'exams') {
+    sub.exams_done_at = nowIso()
+    sub.canvas_feed_url = canvas || null
+    sub.canvas_synced_at = canvas ? nowIso() : sub.canvas_synced_at
+  }
+  if (step === 'obligations') sub.obligations_done_at = nowIso()
+  sub.completed = !!(sub.classes_done_at && sub.exams_done_at && sub.obligations_done_at)
+  sub.updated_at = nowIso()
+  return { ...sub }
+}
+
 function adminUpdateMember(ctx: Ctx, a: Row): Member {
   if (!isAdmin(ctx)) throw new ApiError(403, '42501', 'Only admins can change members')
   const m = state.members.find((x) => x.id === a.p_member_id)
@@ -600,6 +742,12 @@ function rpc(ctx: Ctx, schema: string, fn: string, args: Row): unknown {
       return feedToken(ctx, args.p_rotate === true)
     case 'public.admin_update_member':
       return adminUpdateMember(ctx, args)
+    case 'calendar.start_semester':
+      return startSemester(ctx, args)
+    case 'calendar.submission_counts':
+      return submissionCounts(ctx)
+    case 'calendar.save_schedule_step':
+      return saveScheduleStep(ctx, args)
     default:
       throw new ApiError(404, 'PGRST202', `Could not find the function ${schema}.${fn} in the demo`)
   }
@@ -872,6 +1020,8 @@ export async function demoFetch(input: RequestInfo | URL, init?: RequestInit): P
       const uid = userIdFromAuthHeader(req.headers.get('authorization'))
       return await handleRest(req, url, { uid })
     }
+    if (url.pathname.startsWith('/storage/v1/object/')) return await handleStorage(req, url)
+    if (url.pathname.startsWith('/functions/v1/')) return await handleFunction(req, url)
     return json(404, { message: 'Not available in the demo' })
   } catch (e) {
     if (e instanceof ApiError) return json(e.status, { code: e.code, message: e.message, details: null, hint: null })
@@ -907,13 +1057,17 @@ async function seed(): Promise<State> {
     refresh: {},
     members: [],
     categories: DEFAULT_CATEGORIES.map((c) => ({ ...c })),
-    chair_categories: [],
     settings: { id: true, timezone: CHAPTER_TZ, night_start: '19:00:00', night_end: '23:00:00', secretary_email: null, updated_at: nowIso() },
     event_series: [],
     events: [],
     rsvps: [],
     feed_tokens: [],
     outbox: [],
+    semesters: [],
+    schedule_submissions: [],
+    weekly_blocks: [],
+    dated_items: [],
+    schedule_uploads: [],
   }
   const passwordHash = await hashPassword(DEMO_PASSWORD)
   for (const p of DEMO_PEOPLE) {
@@ -930,7 +1084,6 @@ async function seed(): Promise<State> {
     }
     state.users.push(u)
     addMemberRow(u, p)
-    for (const category of p.chair ?? []) state.chair_categories.push({ member_id: u.id, category })
   }
 
   const today = dayKey(new Date())
@@ -949,6 +1102,7 @@ async function seed(): Promise<State> {
     { title: 'Spring kickoff', category: 'required', start_date: '2027-01-10', start_time: '18:00', end_time: '19:30', location: 'Chapter House' },
   ]
   for (const e of events) createEvent(service, e)
+  seedSchedules(today)
   return state
 }
 
@@ -983,3 +1137,185 @@ export function markInboxRead() {
 }
 
 export const whenReady = () => ready
+
+// ---------------------------------------------------------------------------
+// Storage and Edge Functions stand-ins (schedule uploads, reading, imports)
+// ---------------------------------------------------------------------------
+const uploads = new Map<string, Blob>() // kept in memory only: photos are large
+
+async function handleStorage(req: Request, url: URL): Promise<Response> {
+  const uid = userIdFromAuthHeader(req.headers.get('authorization'))
+  const path = decodeURIComponent(url.pathname.replace(/^\/storage\/v1\/object\/schedule-uploads\//, ''))
+  if (!uid || !path.startsWith(`${uid}/`)) return json(403, { statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' })
+  if (req.method !== 'POST' && req.method !== 'PUT') return json(405, { message: 'Method not allowed' })
+  uploads.set(path, await req.blob())
+  return json(200, { Key: `schedule-uploads/${path}`, Id: uuid() })
+}
+
+interface SampleFn {
+  (input: string, options?: Record<string, unknown>): Promise<{ text: string }>
+  json(input: string, options?: Record<string, unknown>): Promise<unknown>
+  limits(): Promise<{ images?: { maxCount: number } }>
+}
+
+async function askClaude(prompt: string, images: Blob[]): Promise<{ raw: unknown; note?: string } | null> {
+  const sample = (await window.claude?.use('sample').catch(() => null)) as SampleFn | null
+  if (!sample) return null
+  const limits = await sample.limits().catch(() => ({}) as { images?: { maxCount: number } })
+  const canSend = images.length > 0 && !!limits.images
+  const raw = await sample.json(prompt, { modelTier: 'default', ...(canSend ? { images: images.slice(0, limits.images!.maxCount) } : {}) })
+  return { raw, note: images.length > 0 && !canSend ? 'Photos can’t be sent from this preview, so only the typed text was read.' : undefined }
+}
+
+async function handleFunction(req: Request, url: URL): Promise<Response> {
+  const uid = userIdFromAuthHeader(req.headers.get('authorization'))
+  const ctx: Ctx = { uid }
+  if (!uid || !isMember(ctx)) return json(403, { error: 'Your account isn’t approved yet.' })
+  const sem = currentSemester()
+  if (!sem) return json(409, { error: 'There is no current semester yet. Ask an admin to start one.' })
+  const body = (await req.json().catch(() => ({}))) as Row
+  const step = String(body.step) as ScheduleStep
+  const name = url.pathname.replace(/^\/functions\/v1\//, '')
+
+  if (name === 'parse-schedule') {
+    const text = typeof body.text === 'string' ? body.text : ''
+    const paths = Array.isArray(body.image_paths) ? (body.image_paths as string[]) : []
+    const images = paths.map((p) => uploads.get(p)).filter((b): b is Blob => !!b)
+    let parsed: ParsedSchedule
+    try {
+      const answer = await askClaude(buildSchedulePrompt(step, sem, dayKey(new Date()), text, images.length), images)
+      if (answer) {
+        parsed = normalizeAiSchedule(answer.raw, step, sem)
+        if (answer.note) parsed.notes.unshift(answer.note)
+      } else {
+        parsed = sampleParse(step, sem)
+      }
+    } catch (e) {
+      const code = (e as { code?: string })?.code
+      if (code === 'not_granted') return json(403, { error: 'Reading needs your OK to use Claude. Allow it when asked, or add rows by hand.' })
+      if (code === 'rate_limited') return json(429, { error: 'Too many requests. Wait a minute and try again.' })
+      return json(422, { error: 'Couldn’t read that. Try a clearer screenshot or type it instead.' })
+    }
+    recordUpload(uid, sem.id, step, 'ai', text, paths, parsed)
+    return json(200, parsed)
+  }
+
+  if (name === 'import-calendar') {
+    const source = String(body.source)
+    let parsed: ParsedSchedule
+    if (source === 'ics_file') {
+      const blob = uploads.get(String(body.path ?? ''))
+      const text = blob ? await blob.text() : ''
+      if (!text.includes('BEGIN:VCALENDAR')) return json(400, { error: 'That file isn’t a calendar (.ics) file.' })
+      parsed = scheduleFromIcs(parseIcs(text), step, sem)
+    } else {
+      if (source === 'canvas' && !/^https:\/\/[^/\s]+\/feeds\/calendars\/\S+$/.test(String(body.url ?? '').trim())) {
+        return json(400, { error: 'That doesn’t look like a Canvas feed link. In Canvas, open Calendar, then Calendar Feed, and copy the link.' })
+      }
+      // The demo can't fetch other websites, so links import a sample Canvas feed.
+      parsed = scheduleFromCanvas(parseIcs(sampleCanvasIcs(sem)), sem)
+      parsed.notes.unshift('This preview can’t open links, so it imported a sample Canvas feed instead of yours.')
+    }
+    recordUpload(uid, sem.id, step, source, null, [], parsed)
+    return json(200, parsed)
+  }
+
+  return json(404, { error: 'Not available in the demo' })
+}
+
+function recordUpload(memberId: string, semesterId: string, step: string, kind: string, text: string | null, paths: string[], parsed: unknown) {
+  state.schedule_uploads.push({ id: uuid(), member_id: memberId, semester_id: semesterId, step, kind, text_content: text, storage_paths: paths, source_url: null, parsed, created_at: nowIso() })
+  changed()
+}
+
+/** Used when Claude isn't reachable from the preview. */
+function sampleParse(step: ScheduleStep, sem: Semester): ParsedSchedule {
+  const today = dayKey(new Date())
+  const note = 'Claude couldn’t be reached from this preview, so this is a sample result. Edit it like a real one.'
+  if (step === 'classes') {
+    return {
+      blocks: [
+        ...[1, 3, 5].map((weekday) => ({ weekday, start: '10:40', end: '11:30', label: 'COP3502 Lecture', location: 'CSE A101', category: 'school' as const })),
+        ...[2, 4].map((weekday) => ({ weekday, start: '09:35', end: '10:25', label: 'MAC2312 Lecture', location: 'LIT 109', category: 'school' as const })),
+      ],
+      items: [],
+      notes: [note],
+    }
+  }
+  if (step === 'exams') {
+    return normalizeAiSchedule(
+      { dated: [{ kind: 'exam', title: 'Exam 2', course: 'COP3502', date: addDays(today, 5), start: '20:20', end: '22:10' }, { kind: 'exam', title: 'Midterm', course: 'MAC2312', date: addDays(today, 12), start: '20:20', end: '22:10' }], notes: [note] },
+      step,
+      sem,
+    )
+  }
+  return {
+    blocks: [
+      { weekday: 4, start: '18:00', end: '22:00', label: 'Shift at Publix', location: null, category: 'personal' },
+      { weekday: 2, start: '19:00', end: '20:30', label: 'Club soccer practice', location: 'Graham Field', category: 'personal' },
+    ],
+    items: [],
+    notes: [note],
+  }
+}
+
+/** A small Canvas-style feed (UTC times, course codes in brackets) relative to today. */
+function sampleCanvasIcs(sem: Semester): string {
+  const today = dayKey(new Date())
+  const utc = (date: string, time: string) => localInstant(date, time).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+  const term = sem.name.replace(/\s+/g, '')
+  const events = [
+    { uid: 'event-1001', title: `Exam 2 [COP3502-${term}]`, date: addDays(today, 5), start: '20:20', end: '22:10' },
+    { uid: 'event-1002', title: `Midterm Exam [MAC2312-${term}]`, date: addDays(today, 12), start: '20:20', end: '22:10' },
+    { uid: 'assignment-2001', title: `Project 3 [COP3502-${term}]`, date: addDays(today, 6), start: '23:59', end: '23:59' },
+    { uid: 'assignment-2002', title: `Homework 7 [MAC2312-${term}]`, date: addDays(today, 3), start: '23:59', end: '23:59' },
+    { uid: 'assignment-2003', title: `Final Project Presentation [ENC1101-${term}]`, date: addDays(today, 20), start: '23:59', end: '23:59' },
+  ]
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Instructure//Canvas//EN',
+    ...events.flatMap((e) => ['BEGIN:VEVENT', `UID:${e.uid}`, `DTSTART:${utc(e.date, e.start)}`, `DTEND:${utc(e.date, e.end)}`, `SUMMARY:${e.title}`, 'END:VEVENT']),
+    'END:VCALENDAR',
+  ].join('\r\n')
+}
+
+/** Current semester and finished schedules for most sample members (same shape as seed.sql). */
+function seedSchedules(today: string) {
+  const month = Number(today.slice(5, 7))
+  const year = today.slice(0, 4)
+  const sem: Semester = {
+    id: uuid(),
+    name: `${month >= 8 ? 'Fall' : month <= 5 ? 'Spring' : 'Summer'} ${year}`,
+    starts_on: addDays(today, -45),
+    ends_on: addDays(today, 75),
+    is_current: true,
+    created_by: null,
+    created_at: nowIso(),
+  }
+  state.semesters.push(sem)
+  const skip = ['brother2@example.com', 'brother9@example.com', 'am5@example.com']
+  const classes = [
+    { s: '09:35', e: '10:25', label: 'MAC2312 Lecture', loc: 'LIT 109', days: [1, 3, 5] },
+    { s: '11:45', e: '12:35', label: 'COP3502 Lecture', loc: 'CSE A101', days: [1, 3, 5] },
+    { s: '13:55', e: '14:45', label: 'ECO2023 Lecture', loc: 'MAT 18', days: [2, 4] },
+    { s: '15:00', e: '16:55', label: 'CHM2045L Lab', loc: 'JHH 130', days: [3] },
+  ]
+  const people = state.members.filter((m) => m.status === 'approved' && !skip.includes(m.email)).sort((a, b) => a.email.localeCompare(b.email))
+  people.forEach((m, index) => {
+    const n = index + 1
+    const block = (kind: string, category: string, weekday: number, s: string, e: string, label: string, location: string | null) =>
+      state.weekly_blocks.push({ id: uuid(), member_id: m.id, semester_id: sem.id, kind, category, weekday, start_time: `${s}:00`, end_time: `${e}:00`, label, location, created_at: nowIso() })
+    classes.forEach((c, k) => {
+      if ((n + k + 1) % 3 !== 0) c.days.forEach((d) => block('class', 'school', d, c.s, c.e, c.label, c.loc))
+    })
+    if (n % 3 === 0) block('obligation', 'personal', 4, '18:00', '22:00', 'Shift at Publix', 'Publix on 13th St')
+    else if (n % 3 === 1) block('obligation', 'school', 2, '19:00', '20:30', 'Club soccer practice', 'Graham Field')
+    insertItems(m.id, sem.id, [
+      { kind: 'exam', title: 'Exam 2', course: 'COP3502', date: addDays(today, 4 + (n % 3)), start: '20:20', end: '22:10' },
+      { kind: 'exam', title: 'Midterm', course: 'MAC2312', date: addDays(today, 10 + (n % 4)), start: '20:20', end: '22:10' },
+      { kind: 'deadline', title: 'Project 3 due', course: 'COP3502', date: addDays(today, 6), start: '23:59', end: null },
+    ], ['exam', 'deadline'])
+    state.schedule_submissions.push({ member_id: m.id, semester_id: sem.id, classes_done_at: nowIso(), exams_done_at: nowIso(), obligations_done_at: nowIso(), completed: true, canvas_feed_url: null, canvas_synced_at: null, canvas_sync_error: null, updated_at: nowIso() })
+  })
+}

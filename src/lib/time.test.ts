@@ -4,8 +4,9 @@ import {
   eventsByDay,
   formatTimeRange,
   isMultiDayOrAllDay,
-  layoutDay,
   monthGridDays,
+  shortRange,
+  shortTime,
   toFormParts,
   weekDays,
 } from './time'
@@ -96,24 +97,12 @@ describe('isMultiDayOrAllDay', () => {
   })
 })
 
-describe('layoutDay', () => {
-  const day = new Date('2027-01-15T17:00:00Z')
-  it('positions by chapter-time minutes and clamps at midnight', () => {
-    const [item] = layoutDay([ev('2027-01-16T02:00:00Z', '2027-01-16T06:00:00Z')], day)
-    expect(item.top).toBe(21 * 60)
-    expect(item.height).toBe(3 * 60)
-  })
-  it('splits overlapping events into columns', () => {
-    const a = ev('2027-01-15T23:00:00Z', '2027-01-16T01:00:00Z', false, 'a') // 6–8 PM
-    const b = ev('2027-01-16T00:00:00Z', '2027-01-16T01:00:00Z', false, 'b') // 7–8 PM
-    const c = ev('2027-01-16T02:00:00Z', '2027-01-16T03:00:00Z', false, 'c') // 9–10 PM
-    const items = layoutDay([c, b, a], day)
-    const byId = Object.fromEntries(items.map((i) => [i.event.id, i]))
-    expect([byId.a.column, byId.a.columns]).toEqual([0, 2])
-    expect([byId.b.column, byId.b.columns]).toEqual([1, 2])
-    expect([byId.c.column, byId.c.columns]).toEqual([0, 1])
-  })
-  it('ignores all-day events', () => {
-    expect(layoutDay([ev('2027-01-15T05:00:00Z', '2027-01-16T05:00:00Z', true)], day)).toEqual([])
+describe('short times', () => {
+  it('formats chip times compactly', () => {
+    expect(shortTime('2027-01-16T00:00:00Z')).toBe('7p')
+    expect(shortTime('2027-01-16T00:30:00Z')).toBe('7:30p')
+    expect(shortRange(ev('2027-01-16T00:00:00Z', '2027-01-16T01:30:00Z'))).toBe('7–8:30p')
+    expect(shortRange(ev('2027-01-15T16:00:00Z', '2027-01-15T18:00:00Z'))).toBe('11a–1p')
+    expect(shortRange(ev('2027-01-15T05:00:00Z', '2027-01-16T05:00:00Z', true))).toBe('')
   })
 })

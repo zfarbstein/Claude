@@ -1,13 +1,11 @@
 import type { Session } from '@supabase/supabase-js'
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { cal, supabase } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 import type { Member } from '../lib/types'
 
 interface AuthContextValue {
   session: Session | null
   member: Member | null
-  /** Categories this member chairs (only meaningful when role = 'chair'). */
-  chairCategories: string[]
   /** True until the session and (if signed in) the member row are known. */
   loading: boolean
   error: string | null
@@ -21,7 +19,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [sessionReady, setSessionReady] = useState(false)
   const [member, setMember] = useState<Member | null>(null)
-  const [chairCategories, setChairCategories] = useState<string[]>([])
   const [loadedFor, setLoadedFor] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -46,16 +43,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const userId = session?.user.id ?? null
 
   const loadMember = useCallback(async (id: string) => {
-    const [m, c] = await Promise.all([
-      supabase.from('members').select('*').eq('id', id).maybeSingle(),
-      cal.from('chair_categories').select('category').eq('member_id', id),
-    ])
+    const m = await supabase.from('members').select('*').eq('id', id).maybeSingle()
     if (m.error) {
       setError(m.error.message)
     } else {
       setError(null)
       setMember(m.data)
-      setChairCategories((c.data ?? []).map((r) => r.category))
     }
     setLoadedFor(id)
   }, [])
@@ -90,13 +83,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       session,
       member: userId && loadedFor === userId ? member : null,
-      chairCategories: userId && loadedFor === userId ? chairCategories : [],
       loading: !sessionReady || (userId !== null && loadedFor !== userId),
       error,
       refreshMember,
       signOut,
     }),
-    [session, userId, loadedFor, member, chairCategories, sessionReady, error, refreshMember, signOut],
+    [session, userId, loadedFor, member, sessionReady, error, refreshMember, signOut],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

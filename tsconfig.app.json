@@ -20,10 +20,11 @@
   },
   "include": ["src", "supabase/functions/_shared"],
   "exclude": [
-    "src/sw.ts",
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
+    "src/sw.ts",
     "src/test",
-    "supabase/functions/**/*.test.ts"
+    "supabase/functions/**/*.test.ts",
+    "supabase/functions/_shared/server.ts"
   ]
 }

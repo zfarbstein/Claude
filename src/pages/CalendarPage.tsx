@@ -9,10 +9,11 @@ import { EventForm, type EventFormMode } from '../calendar/EventForm'
 import { EventRow } from '../calendar/EventRow'
 import { MonthGrid } from '../calendar/MonthGrid'
 import { WeekGrid } from '../calendar/WeekGrid'
+import { useMyCalendarItems } from '../schedule/api'
 import { Alert, Button } from '../components/ui'
 import { cx } from '../lib/cx'
 import { DEFAULT_CATEGORIES } from '../lib/categories'
-import { isBrother, manageableCategories } from '../lib/permissions'
+import { canManageEvents, isBrother } from '../lib/permissions'
 import {
   dayKey,
   eventsByDay,
@@ -24,19 +25,19 @@ import {
   rangeOfDays,
   weekDays,
 } from '../lib/time'
-import type { CalendarEvent } from '../lib/types'
+import type { DisplayEvent } from '../lib/types'
 import { useNow } from '../lib/useNow'
 import { useStoredState } from '../lib/useStoredState'
 
 type View = 'month' | 'week'
 
 export default function CalendarPage() {
-  const { member, chairCategories } = useAuth()
+  const { member } = useAuth()
   const [view, setView] = useStoredState<View>('calendar.view', 'month')
   const [hidden, setHidden] = useStoredState<string[]>('calendar.hiddenCategories', [])
   const [cursor, setCursor] = useState<Date>(() => nowInChapterTz())
   const [selectedKey, setSelectedKey] = useState(() => dayKey(Date.now()))
-  const [openEvent, setOpenEvent] = useState<CalendarEvent | null>(null)
+  const [openEvent, setOpenEvent] = useState<DisplayEvent | null>(null)
   const [formMode, setFormMode] = useState<EventFormMode | null>(null)
   const touchX = useRef<number | null>(null)
 
@@ -50,16 +51,19 @@ export default function CalendarPage() {
   const categoryMap = useMemo(() => new Map(categories.map((c) => [c.key, c])), [categories])
   const eventsQuery = useEvents(start, end)
   const rsvpsQuery = useMyRsvps(member?.id)
+  const personalQuery = useMyCalendarItems(start, end)
 
   const visibleEvents = useMemo(
-    () => (eventsQuery.data ?? []).filter((e) => !hidden.includes(e.category)),
-    [eventsQuery.data, hidden],
+    () => [...(eventsQuery.data ?? []), ...(personalQuery.data ?? [])].filter((e) => !hidden.includes(e.category)) as DisplayEvent[],
+    [eventsQuery.data, personalQuery.data, hidden],
   )
   const byDay = useMemo(() => eventsByDay(visibleEvents), [visibleEvents])
-  const manageable = manageableCategories(member, chairCategories, categories.map((c) => c.key))
+  const manageable = canManageEvents(member) ? categories.map((c) => c.key) : []
   const selectedEvents = byDay.get(selectedKey) ?? []
   // Keep the open sheet in sync after edits/refetches.
-  const liveOpenEvent = openEvent ? (eventsQuery.data?.find((e) => e.id === openEvent.id) ?? openEvent) : null
+  const liveOpenEvent: DisplayEvent | null = openEvent
+    ? (eventsQuery.data?.find((e) => e.id === openEvent.id) ?? openEvent)
+    : null
 
   const move = (delta: number) => {
     const next = view === 'month' ? addMonths(cursor, delta) : addWeeks(cursor, delta)
@@ -177,19 +181,7 @@ export default function CalendarPage() {
             </section>
           </>
         ) : (
-          <WeekGrid
-            days={days}
-            todayKey={todayKey}
-            now={now}
-            byDay={byDay}
-            categories={categoryMap}
-            onOpen={setOpenEvent}
-            onSelectDay={(key) => {
-              setSelectedKey(key)
-              setCursor(fromDayKey(key))
-              setView('month')
-            }}
-          />
+          <WeekGrid days={days} todayKey={todayKey} byDay={byDay} categories={categoryMap} onOpen={setOpenEvent} />
         )}
       </main>
 

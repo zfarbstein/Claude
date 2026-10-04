@@ -4,6 +4,7 @@ import { BrowserRouter, MemoryRouter, Navigate, Route, Routes } from 'react-rout
 import { AuthProvider, useAuth } from './auth/AuthProvider'
 import { FullScreenLoading, PublicOnly, RequireAdmin, RequireApproved, RequireSession } from './auth/guards'
 import { AppLayout } from './components/AppLayout'
+import { RequireSchedule } from './schedule/RequireSchedule'
 import { InstallPrompt } from './components/InstallPrompt'
 import { ToastProvider } from './components/Toast'
 import { UpdatePrompt } from './components/UpdatePrompt'
@@ -18,7 +19,11 @@ import ResetPassword from './pages/ResetPassword'
 import Signup from './pages/Signup'
 
 const MePage = lazy(() => import('./pages/MePage'))
+const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'))
 const AdminMembers = lazy(() => import('./pages/admin/AdminMembers'))
+const AdminSemester = lazy(() => import('./pages/admin/AdminSemester'))
+const SetupPage = lazy(() => import('./schedule/SetupPage'))
+const MySchedulePage = lazy(() => import('./schedule/MySchedulePage'))
 
 // The in-Claude demo (npm run build:demo) runs in a frame with no real URL, so it routes in memory.
 const DEMO = !!import.meta.env.VITE_DEMO
@@ -63,6 +68,7 @@ export default function App() {
                 <Route path="/auth/callback" element={<AuthCallback />} />
                 <Route path="/auth/confirm" element={<AuthConfirm />} />
                 <Route path="/pending" element={<RequireSession><Pending /></RequireSession>} />
+                <Route path="/setup" element={<RequireSession><RequireApproved><SetupPage /></RequireApproved></RequireSession>} />
                 <Route
                   element={
                     <RequireSession>
@@ -72,9 +78,14 @@ export default function App() {
                     </RequireSession>
                   }
                 >
-                  <Route index element={<CalendarPage />} />
+                  <Route index element={<RequireSchedule><CalendarPage /></RequireSchedule>} />
                   <Route path="me" element={<MePage />} />
-                  <Route path="admin/members" element={<RequireAdmin><AdminMembers /></RequireAdmin>} />
+                  <Route path="me/schedule" element={<MySchedulePage />} />
+                  <Route path="admin" element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
+                    <Route index element={<Navigate to="members" replace />} />
+                    <Route path="members" element={<AdminMembers />} />
+                    <Route path="semester" element={<AdminSemester />} />
+                  </Route>
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

@@ -203,8 +203,8 @@ function EventFormBody({ mode, categories, manageable, onClose }: EventFormProps
           onChange={(e) => set('required', e.target.checked)}
         />
         <Checkbox
-          label="Hide from Associate Members"
-          description="For rush and pledge planning. AMs won't see this event anywhere."
+          label="Hide from pledges"
+          description="For rush and pledge planning. Pledges won't see this event anywhere."
           checked={values.hidden_from_associates}
           onChange={(e) => set('hidden_from_associates', e.target.checked)}
         />

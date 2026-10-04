@@ -6,6 +6,13 @@ export type MemberType = Database['public']['Enums']['member_type']
 export type MemberStatus = Database['public']['Enums']['member_status']
 export type CalendarEvent = Database['calendar']['Tables']['events']['Row']
 export type Category = Database['calendar']['Tables']['categories']['Row']
+export type Semester = Database['calendar']['Tables']['semesters']['Row']
+export type Submission = Database['calendar']['Tables']['schedule_submissions']['Row']
+export type WeeklyBlockRow = Database['calendar']['Tables']['weekly_blocks']['Row']
+export type DatedItemRow = Database['calendar']['Tables']['dated_items']['Row']
+
+/** What the calendar draws: chapter events, plus the member's own exams and one-off obligations. */
+export type DisplayEvent = CalendarEvent & { personal?: { kind: 'exam' | 'obligation'; course: string | null } }
 export type RsvpStatus = 'going' | 'maybe' | 'not_going'
 export type Rsvp = { event_id: string; member_id: string; status: RsvpStatus }
 

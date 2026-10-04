@@ -49,25 +49,6 @@ insert into calendar.categories (key, label, color, sort_order) values
   ('school',       'School/Involvement Obligations',  '#0F766E', 6),
   ('personal',     'Personal',                        '#4B5563', 7);
 
--- Which categories each chair manages.
-create table calendar.chair_categories (
-  member_id uuid not null references public.members (id) on delete cascade,
-  category text not null references calendar.categories (key) on update cascade on delete cascade,
-  primary key (member_id, category)
-);
-
-create function calendar.can_manage_category(p_category text) returns boolean
-language sql stable security definer set search_path = '' as $$
-  select public.is_admin() or exists (
-    select 1
-    from public.members m
-    join calendar.chair_categories c on c.member_id = m.id
-    where m.id = (select auth.uid())
-      and m.status = 'approved' and m.active and m.role = 'chair'
-      and c.category = p_category
-  );
-$$;
-
 -- -----------------------------------------------------------------------------
 -- Events. A recurring event is stored as one row per occurrence that share a
 -- series_id, so RSVPs / attendance / reminders always point at a concrete row.
@@ -158,7 +139,6 @@ create table calendar.feed_tokens (
 -- -----------------------------------------------------------------------------
 alter table calendar.settings enable row level security;
 alter table calendar.categories enable row level security;
-alter table calendar.chair_categories enable row level security;
 alter table calendar.event_series enable row level security;
 alter table calendar.events enable row level security;
 alter table calendar.rsvps enable row level security;
@@ -174,30 +154,24 @@ create policy categories_select on calendar.categories for select to authenticat
 create policy categories_update on calendar.categories for update to authenticated
   using ((select public.is_admin())) with check ((select public.is_admin()));
 
-create policy chair_categories_select on calendar.chair_categories for select to authenticated
-  using ((select public.is_member()));
-create policy chair_categories_insert on calendar.chair_categories for insert to authenticated
-  with check ((select public.is_admin()));
-create policy chair_categories_delete on calendar.chair_categories for delete to authenticated
-  using ((select public.is_admin()));
-
 create policy event_series_select on calendar.event_series for select to authenticated
   using ((select public.is_member()));
 create policy event_series_insert on calendar.event_series for insert to authenticated
-  with check ((select public.is_admin()) or (select public.is_chair()));
+  with check ((select public.is_admin()));
 create policy event_series_delete on calendar.event_series for delete to authenticated
-  using ((select public.is_admin()) or (select public.is_chair()));
+  using ((select public.is_admin()));
 
 -- Associates never see events flagged hidden_from_associates (rush/pledge planning).
 create policy events_select on calendar.events for select to authenticated
   using ((select public.is_member()) and (not hidden_from_associates or (select public.is_brother())));
+-- Only admins create, edit and delete chapter events.
 create policy events_insert on calendar.events for insert to authenticated
-  with check (calendar.can_manage_category(category));
+  with check ((select public.is_admin()));
 create policy events_update on calendar.events for update to authenticated
-  using (calendar.can_manage_category(category))
-  with check (calendar.can_manage_category(category));
+  using ((select public.is_admin()))
+  with check ((select public.is_admin()));
 create policy events_delete on calendar.events for delete to authenticated
-  using (calendar.can_manage_category(category));
+  using ((select public.is_admin()));
 
 -- Brothers see everyone's RSVPs; associates only their own.
 create policy rsvps_select on calendar.rsvps for select to authenticated
@@ -226,7 +200,7 @@ create policy rsvps_delete on calendar.rsvps for delete to authenticated
 
 -- feed_tokens: no policies; only reachable through calendar.feed_token().
 revoke all on calendar.feed_tokens from anon, authenticated;
-revoke all on calendar.settings, calendar.categories, calendar.chair_categories, calendar.event_series,
+revoke all on calendar.settings, calendar.categories, calendar.event_series,
   calendar.events, calendar.rsvps from anon;
 
 -- -----------------------------------------------------------------------------

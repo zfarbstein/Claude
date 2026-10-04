@@ -8,7 +8,8 @@
 
 create extension if not exists pgcrypto with schema extensions;
 
-create type public.member_role as enum ('admin', 'chair', 'member');
+-- Three views: admin (exec), brother (role member + type brother), pledge (type associate).
+create type public.member_role as enum ('admin', 'member');
 create type public.member_type as enum ('brother', 'associate');
 create type public.member_status as enum ('pending', 'approved', 'rejected');
 
@@ -30,7 +31,7 @@ create table public.members (
 );
 
 comment on table public.members is 'Shared chapter roster. One row per auth user; reused by every hub app.';
-comment on column public.members.role is 'Permission level: admin (exec), chair, member.';
+comment on column public.members.role is 'Permission level: admin (exec) or member.';
 comment on column public.members.member_type is 'brother or associate (pledge).';
 comment on column public.members.active is 'False for alumni / removed members. Inactive members lose access everywhere.';
 
@@ -73,14 +74,6 @@ language sql stable security definer set search_path = '' as $$
   select exists (
     select 1 from public.members m
     where m.id = (select auth.uid()) and m.status = 'approved' and m.active and m.role = 'admin'
-  );
-$$;
-
-create function public.is_chair() returns boolean
-language sql stable security definer set search_path = '' as $$
-  select exists (
-    select 1 from public.members m
-    where m.id = (select auth.uid()) and m.status = 'approved' and m.active and m.role = 'chair'
   );
 $$;
 

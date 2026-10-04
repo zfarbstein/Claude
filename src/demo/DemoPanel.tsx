@@ -10,11 +10,10 @@ import { supabase } from '../lib/supabase'
 import { DEMO_PASSWORD, getOutbox, getVersion, markInboxRead, resetDemo, subscribe, type DemoEmail } from './backend'
 
 const ACCOUNTS = [
-  { email: 'president@example.com', label: 'Admin (exec)', name: 'Alex Rivera' },
-  { email: 'social@example.com', label: 'Chair: Socials', name: 'Sam Patel' },
-  { email: 'rush@example.com', label: 'Chair: Rush', name: 'Taylor Brooks' },
+  { email: 'president@example.com', label: 'Admin', name: 'Alex Rivera' },
   { email: 'brother1@example.com', label: 'Brother', name: 'Marcus Johnson' },
-  { email: 'am1@example.com', label: 'Associate Member', name: 'Luke Garcia' },
+  { email: 'am1@example.com', label: 'Pledge', name: 'Luke Garcia' },
+  { email: 'brother2@example.com', label: 'Brother, schedule not set up', name: 'Ethan Kim' },
   { email: 'pending1@example.com', label: 'Waiting for approval', name: 'Pat Newcomer' },
 ]
 

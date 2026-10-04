@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { SEED_ADMIN, SEED_PASSWORD, expectCalendar, linkFromEmail, newMobilePage, service, signIn, uniqueEmail, waitForEmail } from './support.ts'
 
-test('new sign-ups confirm their email, wait for approval, and get in once an admin approves', async ({ browser }) => {
+test('new sign-ups confirm their email, wait for approval, then set up their schedule', async ({ browser }) => {
   const email = uniqueEmail('signup')
   const name = `Newbie ${Date.now()}`
 
@@ -35,14 +35,15 @@ test('new sign-ups confirm their email, wait for approval, and get in once an ad
   await admin.getByRole('link', { name: 'Admin' }).click()
   const row = admin.getByRole('listitem').filter({ hasText: email })
   await expect(row).toBeVisible()
-  await row.getByRole('button', { name: 'Approve as AM' }).click()
+  await row.getByRole('button', { name: 'Approve as Pledge' }).click()
   await expect(admin.getByText(`${name} approved`)).toBeVisible()
   await expect(row).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Check again' }).click()
-  await expectCalendar(page)
-  // Associates don't get the admin tab.
-  await expect(page.getByRole('link', { name: 'Admin' })).toHaveCount(0)
+  // The calendar stays locked until the schedule is set up.
+  await expect(page.getByRole('heading', { name: 'Set up your schedule' })).toBeVisible()
+  await page.goto('/')
+  await expect(page).toHaveURL(/\/setup$/)
 
   const { data } = await service.from('members').select('id,status,member_type').eq('email', email).single()
   expect(data).toMatchObject({ status: 'approved', member_type: 'associate' })

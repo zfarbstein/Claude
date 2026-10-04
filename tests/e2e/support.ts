@@ -20,7 +20,9 @@ type MemberSetup = {
   name: string
   status?: 'pending' | 'approved' | 'rejected'
   member_type?: 'brother' | 'associate'
-  role?: 'admin' | 'chair' | 'member'
+  role?: 'admin' | 'member'
+  /** Mark this semester's schedule as already submitted (default) so the calendar isn't gated. */
+  schedule?: boolean
 }
 
 /** Creates a confirmed auth user and sets their member row (service role bypasses RLS). */
@@ -38,6 +40,17 @@ export async function createMember(m: MemberSetup): Promise<string> {
     .update({ status: m.status ?? 'approved', member_type: m.member_type ?? 'brother', role: m.role ?? 'member' })
     .eq('id', id)
   if (updateError) throw updateError
+  if (m.schedule !== false && (m.status ?? 'approved') === 'approved') {
+    const { data: sem } = await service.schema('calendar').from('semesters').select('id').eq('is_current', true).maybeSingle()
+    if (sem) {
+      const now = new Date().toISOString()
+      const { error } = await service
+        .schema('calendar')
+        .from('schedule_submissions')
+        .insert({ member_id: id, semester_id: sem.id, classes_done_at: now, exams_done_at: now, obligations_done_at: now })
+      if (error) throw error
+    }
+  }
   return id
 }
 
@@ -104,11 +117,16 @@ export function chapterDate(offsetDays: number): string {
 export function chapterInstant(date: string, time: string): string {
   const [y, m, d] = date.split('-').map(Number)
   const [hh, mm] = time.split(':').map(Number)
-  return new TZDate(y, m - 1, d, hh, mm, 'America/New_York').toISOString()
+  // TZDate.toISOString() keeps the -04:00 offset; callers want plain UTC.
+  return new Date(new TZDate(y, m - 1, d, hh, mm, 'America/New_York').getTime()).toISOString()
 }
+
+/** The selected day's event list under the month grid. */
+export const agenda = (page: Page) => page.locator('section[aria-labelledby="day-title"]')
 
 /** Selects a day in the month view, paging forward if it's in a later month. */
 export async function openDay(page: Page, date: string) {
+  await page.locator('[data-day]').first().waitFor()
   for (let i = 0; i < 3; i++) {
     const cell = page.locator(`[data-day="${date}"]`)
     if (await cell.count()) {

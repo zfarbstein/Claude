@@ -1,4 +1,4 @@
-import { CalendarPlus, Copy, KeyRound, LogOut, RefreshCw, Smartphone } from 'lucide-react'
+import { CalendarDays, CalendarPlus, Copy, KeyRound, LogOut, RefreshCw, Smartphone } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { useAuth } from '../auth/AuthProvider'
@@ -6,7 +6,7 @@ import { PageHeader } from '../components/AppLayout'
 import { IosInstallSteps, useInstallPrompt } from '../components/InstallPrompt'
 import { useToast } from '../components/Toast'
 import { Alert, Badge, Button, TextField } from '../components/ui'
-import { ROLE_LABELS, TYPE_LABELS } from '../lib/permissions'
+import { ACCESS_LABELS, accessOf } from '../lib/permissions'
 import { isIos, isStandalone } from '../lib/platform'
 import { cal, functionsUrl, supabase } from '../lib/supabase'
 
@@ -38,8 +38,7 @@ export default function MePage() {
           </h2>
           <p className="text-slate-700">{member.email}</p>
           <div className="flex flex-wrap gap-1.5">
-            <Badge>{TYPE_LABELS[member.member_type]}</Badge>
-            {member.role !== 'member' && <Badge className="bg-brand-50 text-brand-900">{ROLE_LABELS[member.role]}</Badge>}
+            <Badge className="bg-brand-50 text-brand-900">{ACCESS_LABELS[accessOf(member)]}</Badge>
             {member.pledge_class && <Badge>{member.pledge_class} class</Badge>}
           </div>
           <div className="flex items-end gap-2">
@@ -51,6 +50,14 @@ export default function MePage() {
             </Button>
           </div>
         </section>
+
+        <Link
+          to="/me/schedule"
+          className="flex min-h-14 items-center gap-3 rounded-2xl bg-white px-4 font-bold text-slate-900 ring-1 ring-slate-200 hover:bg-slate-50"
+        >
+          <CalendarDays aria-hidden className="size-5 text-brand-700" /> My schedule
+          <span className="ml-auto text-sm font-semibold text-slate-600">Classes, exams, obligations</span>
+        </Link>
 
         <FeedSection />
         <InstallSection />
