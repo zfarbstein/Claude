@@ -84,6 +84,24 @@ After changing SQL, regenerate types with `npm run db:types`.
 | `RESEND_API_KEY` | Supabase secrets | Phase 4+ notification emails. Auth emails use SMTP (below) |
 | `CALENDAR_NAME` | Supabase secrets (optional) | Name shown for the subscribed .ics calendar |
 
+## Deploy a test site (staging)
+
+`npm run deploy:staging` (`scripts/deploy-staging.mjs`) puts a test copy online. It's safe to re-run after each phase. It does the following:
+
+1. Creates the Supabase project `chapter-hub-staging`.
+2. Applies the migrations.
+3. Sets the login settings and email templates.
+4. Deploys the site to Vercel.
+5. Loads the demo members and sample events, then prints the site link and a new demo password.
+
+It needs, in the environment where it runs:
+
+- `SUPABASE_ACCESS_TOKEN` from https://supabase.com/dashboard/account/tokens
+- `VERCEL_TOKEN` from https://vercel.com/account/settings/tokens
+- network access to `api.supabase.com`, `*.supabase.co`, `api.vercel.com`, `*.vercel.app`
+
+Until Resend is set up, Supabase's built-in mailer only emails addresses on your Supabase team. Test sign-up and password reset with the email you used for Supabase. Free projects pause after a week unused; re-running the script wakes the project up. Production gets its own clean project (below), never the staging one.
+
 ## Production setup
 
 ### 1. Supabase

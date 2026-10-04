@@ -16,7 +16,8 @@
     "db:start": "supabase start",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local --schema public,calendar > src/lib/database.types.ts",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "deploy:staging": "node scripts/deploy-staging.mjs"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",

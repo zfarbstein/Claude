@@ -6,7 +6,14 @@ import { buildCalendar, type FeedEvent } from '../_shared/ics.ts'
 
 const TOKEN_RE = /^[a-f0-9]{48}$/
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+// Legacy JWT service key, or the first of the newer sb_secret_ keys.
+const SERVICE_KEY =
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ??
+  (Object.values(JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}'))[0] as string)
+// sb_secret_ keys go only in `apikey`; JWT keys also go in Authorization.
+const AUTH_HEADERS: Record<string, string> = SERVICE_KEY.startsWith('sb_')
+  ? { apikey: SERVICE_KEY }
+  : { apikey: SERVICE_KEY, authorization: `Bearer ${SERVICE_KEY}` }
 
 Deno.serve(async (req) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -19,8 +26,7 @@ Deno.serve(async (req) => {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/feed_events`, {
     method: 'POST',
     headers: {
-      apikey: SERVICE_ROLE_KEY,
-      authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      ...AUTH_HEADERS,
       'content-profile': 'calendar',
       'content-type': 'application/json',
     },
