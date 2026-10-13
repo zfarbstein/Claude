@@ -1,0 +1,378 @@
+<title>Exec Idea Book</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column. Composer card on top, position tabs below it, then that position's ideas newest first. */
+:root {
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --fg: #1a2030;
+  --muted: #5b6477;
+  --line: #d8dce5;
+  --accent: #26428f;
+  --accent-fg: #ffffff;
+  --accent-soft: #e5eaf6;
+  --danger: #b3261e;
+  --ok: #1d6b3a;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10131a; --surface: #191e28; --fg: #e6e9f0; --muted: #9aa3b6; --line: #2b3240;
+    --accent: #93abee; --accent-fg: #0e1320; --accent-soft: #212b44; --danger: #f08b81; --ok: #80d29c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10131a; --surface: #191e28; --fg: #e6e9f0; --muted: #9aa3b6; --line: #2b3240;
+  --accent: #93abee; --accent-fg: #0e1320; --accent-soft: #212b44; --danger: #f08b81; --ok: #80d29c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--body); }
+.wrap { max-width: 640px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: grid; gap: 20px; }
+h1 { font: 700 1.6rem/1.15 var(--display); margin: 0; letter-spacing: .01em; text-wrap: balance; }
+.sub { margin: 4px 0 0; color: var(--muted); font-size: .9rem; }
+
+.composer { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 12px; }
+label { font: 600 .75rem/1 var(--body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); display: block; margin-bottom: 6px; }
+textarea, select { width: 100%; font: 16px/1.45 var(--body); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+textarea { min-height: 120px; resize: vertical; }
+textarea:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button { font: 600 1rem/1 var(--body); border-radius: 8px; padding: 12px 16px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button:disabled { opacity: .55; cursor: default; }
+button.small { font-size: .85rem; padding: 7px 11px; }
+button.link { border: 0; background: none; color: var(--accent); padding: 6px 4px; font-size: .85rem; }
+button.danger { color: var(--danger); }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.status { font-size: .9rem; min-height: 1.35em; margin: 0; }
+.status.ok { color: var(--ok); }
+.status.error { color: var(--danger); }
+.banner { border: 1px solid var(--danger); color: var(--danger); border-radius: 8px; padding: 10px 12px; font-size: .9rem; margin: 0; }
+
+.tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.tab { flex: none; font: 600 .85rem/1 var(--body); padding: 9px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--fg); display: inline-flex; gap: 6px; align-items: center; }
+.tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.tab .n { font: 500 .75rem/1 var(--mono); opacity: .8; font-variant-numeric: tabular-nums; }
+
+.section { display: grid; gap: 10px; }
+.section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+h2 { font: 700 1.15rem/1.2 var(--display); margin: 0; display: flex; gap: 8px; align-items: baseline; }
+.badge { font: 700 .8rem/1 var(--display); background: var(--accent-soft); color: var(--accent); border-radius: 6px; padding: 4px 7px; min-width: 2em; text-align: center; letter-spacing: .03em; }
+.count { color: var(--muted); font: 400 .8rem/1 var(--mono); }
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.idea { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; min-width: 0; }
+.idea p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.when { font: 400 .75rem/1 var(--mono); color: var(--muted); }
+.actions { display: flex; gap: 2px; }
+.confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: .9rem; }
+.empty { color: var(--muted); margin: 0; font-size: .95rem; }
+.edit { display: grid; gap: 8px; }
+.edit textarea { min-height: 90px; }
+@media (prefers-reduced-motion: no-preference) { .flash { animation: flash 1.2s ease-out; } }
+@keyframes flash { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 0 transparent; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Exec Idea Book</h1>
+    <p class="sub">Write an idea, pick the exec position it's for, and save. Each position gets its own page.</p>
+  </header>
+
+  <p class="banner" id="banner" hidden></p>
+
+  <form class="composer" id="composer" autocomplete="off">
+    <div>
+      <label for="idea-text">Idea</label>
+      <textarea id="idea-text" placeholder="e.g. Move chapter meetings to 8 PM during finals week"></textarea>
+    </div>
+    <div>
+      <label for="idea-branch">Exec position</label>
+      <select id="idea-branch"></select>
+    </div>
+    <div class="row">
+      <button type="submit" class="primary" id="save-btn" disabled>Connecting…</button>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+  </form>
+
+  <nav class="tabs" id="tabs" aria-label="Positions"></nav>
+  <main id="board"></main>
+</div>
+
+<script>
+const BRANCHES = [
+  { key: "A", badge: "A", name: "President" },
+  { key: "B", badge: "B", name: "Vice President" },
+  { key: "C", badge: "C", name: "Secretary" },
+  { key: "D", badge: "D", name: "Treasurer" },
+  { key: "E", badge: "E", name: "Alumni Secretary" },
+  { key: "F", badge: "F", name: "Risk Manager" },
+  { key: "G", badge: "G", name: "Brother at Large" },
+  { key: "H", badge: "H", name: "Housing Manager" },
+  { key: "rush", badge: "Rush", name: "Rush Chair" },
+  { key: "social", badge: "Social", name: "Social Chair" },
+  { key: "amc", badge: "AMC", name: "AMC" },
+];
+const BY_KEY = Object.fromEntries(BRANCHES.map(b => [b.key, b]));
+const optionLabel = b => b.badge.length === 1 ? `${b.badge} (${b.name})` : b.name;
+
+const $ = id => document.getElementById(id);
+const ta = $("idea-text"), sel = $("idea-branch"), btn = $("save-btn"), statusEl = $("status");
+const DRAFT_KEY = "exec-ideas-draft", VIEW_KEY = "exec-ideas-view";
+
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+
+let db = null;
+let ideas = [];
+let loaded = false;
+let view = store.get(VIEW_KEY) || "all";
+if (view !== "all" && !BY_KEY[view]) view = "all";
+let editing = null;      // { id, text, branch }
+let confirming = null;   // id awaiting delete confirmation
+let flashId = null;
+
+function fillSelect(el, value, placeholder) {
+  el.replaceChildren();
+  if (placeholder) {
+    const o = new Option(placeholder, "");
+    o.disabled = true;
+    el.add(o);
+  }
+  for (const b of BRANCHES) el.add(new Option(optionLabel(b), b.key));
+  el.value = value || "";
+}
+
+// Draft: whatever is in the box is kept on this phone until it is saved.
+const draft = store.get(DRAFT_KEY) || {};
+fillSelect(sel, draft.branch && BY_KEY[draft.branch] ? draft.branch : "", "Choose a position…");
+ta.value = draft.text || "";
+const saveDraft = () => store.set(DRAFT_KEY, { text: ta.value, branch: sel.value });
+ta.addEventListener("input", saveDraft);
+sel.addEventListener("change", () => { saveDraft(); setStatus(""); });
+
+function setStatus(msg, kind) {
+  statusEl.textContent = msg;
+  statusEl.className = "status" + (kind ? " " + kind : "");
+}
+function showBanner(msg) { const b = $("banner"); b.textContent = msg; b.hidden = !msg; }
+
+function errorText(e) {
+  const code = e && e.code;
+  if (code === "invalid_argument") return "This account can't save here. Ask the page owner to give you Contributor access.";
+  if (code === "quota_exceeded") return "The idea book is full. Delete some old ideas, then save again.";
+  if (code === "resource_exhausted") return "Too many saves at once. Wait a few seconds and tap Save again.";
+  return "Couldn't save. Check your connection and tap Save again. Your text is still here.";
+}
+
+async function withRetry(fn) {
+  try { return await fn(); }
+  catch (e) {
+    if (e && (e.code === "unavailable" || !e.code)) {
+      await new Promise(r => setTimeout(r, 600 + Math.random() * 800));
+      return await fn();
+    }
+    throw e;
+  }
+}
+
+$("composer").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const text = ta.value.trim();
+  const branch = sel.value;
+  if (!text) { setStatus("Write the idea first.", "error"); ta.focus(); return; }
+  if (!BY_KEY[branch]) { setStatus("Pick which exec position this is for.", "error"); sel.focus(); return; }
+  if (!db) { setStatus("Saving isn't available yet. Your text is kept on this phone.", "error"); return; }
+  btn.disabled = true;
+  setStatus("Saving…");
+  const ref = db.collection("ideas").doc();
+  const now = Date.now();
+  try {
+    await withRetry(() => ref.set({ text, branch, createdAt: now, updatedAt: now }));
+    ta.value = "";
+    saveDraft();
+    flashId = ref.id;
+    setStatus(`Saved to ${optionLabel(BY_KEY[branch])}.`, "ok");
+    render();
+  } catch (e) {
+    setStatus(errorText(e), "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function fmtWhen(ms) {
+  if (typeof ms !== "number") return "";
+  return new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function el(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "text") n.textContent = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids) if (c) n.append(c);
+  return n;
+}
+
+function countFor(key) { return ideas.filter(i => i.branch === key).length; }
+
+function renderTabs() {
+  const tabs = $("tabs");
+  const make = (key, label, n) => el("button", {
+    class: "tab", type: "button", "aria-pressed": String(view === key),
+    onclick: () => { view = key; store.set(VIEW_KEY, key); confirming = null; render(); },
+  }, el("span", { text: label }), el("span", { class: "n", text: String(n) }));
+  tabs.replaceChildren(
+    make("all", "All", ideas.length),
+    ...BRANCHES.map(b => make(b.key, b.badge.length === 1 ? `${b.badge} · ${b.name}` : b.name, countFor(b.key)))
+  );
+  const active = tabs.querySelector('[aria-pressed="true"]');
+  if (active && active.scrollIntoView) active.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+function ideaItem(idea) {
+  const li = el("li", { class: "idea" + (idea.id === flashId ? " flash" : "") });
+  if (editing && editing.id === idea.id) {
+    const eta = el("textarea", { id: "edit-text", "aria-label": "Edit idea" });
+    eta.value = editing.text;
+    eta.addEventListener("input", () => { editing.text = eta.value; });
+    const esel = el("select", { id: "edit-branch", "aria-label": "Exec position" });
+    fillSelect(esel, editing.branch);
+    esel.addEventListener("change", () => { editing.branch = esel.value; });
+    const saveBtn = el("button", { class: "primary small", type: "button", text: "Save changes", onclick: async () => {
+      const text = editing.text.trim();
+      if (!text) { eta.focus(); return; }
+      saveBtn.disabled = true;
+      try {
+        const branch = editing.branch;
+        await withRetry(() => db.collection("ideas").doc(idea.id).update({ text, branch, updatedAt: Date.now() }));
+        editing = null;
+        setStatus(`Updated. Filed under ${optionLabel(BY_KEY[branch])}.`, "ok");
+        render();
+      } catch (e) {
+        saveBtn.disabled = false;
+        setStatus(errorText(e), "error");
+      }
+    }});
+    li.append(el("div", { class: "edit" }, eta, esel,
+      el("div", { class: "row" }, saveBtn,
+        el("button", { class: "small", type: "button", text: "Cancel", onclick: () => { editing = null; render(); } }))));
+    return li;
+  }
+
+  li.append(el("p", { text: idea.text }));
+  const meta = el("div", { class: "meta" });
+  const when = fmtWhen(idea.createdAt) + (idea.updatedAt && idea.updatedAt - idea.createdAt > 1000 ? " · edited" : "");
+  meta.append(el("span", { class: "when", text: when }));
+  if (confirming === idea.id) {
+    meta.append(el("div", { class: "confirm" },
+      el("span", { text: "Delete this idea?" }),
+      el("button", { class: "small danger", type: "button", text: "Delete", onclick: async ev => {
+        ev.currentTarget.disabled = true;
+        try {
+          await withRetry(() => db.collection("ideas").doc(idea.id).delete());
+          confirming = null;
+          setStatus("Deleted.", "ok");
+          render();
+        } catch (e) { setStatus("Couldn't delete. Try again.", "error"); render(); }
+      }}),
+      el("button", { class: "small", type: "button", text: "Keep", onclick: () => { confirming = null; render(); } })));
+  } else {
+    meta.append(el("div", { class: "actions" },
+      el("button", { class: "link", type: "button", text: "Edit", disabled: !db, onclick: () => {
+        editing = { id: idea.id, text: idea.text, branch: idea.branch }; confirming = null; render();
+        const t = $("edit-text"); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
+      }}),
+      el("button", { class: "link danger", type: "button", text: "Delete", disabled: !db, onclick: () => { confirming = idea.id; render(); } })));
+  }
+  li.append(meta);
+  return li;
+}
+
+function copyButton(b, list) {
+  return el("button", { class: "small", type: "button", text: "Copy list", onclick: async ev => {
+    const lines = [`${optionLabel(b)} ideas`, ...list.map(i => `- ${i.text.replace(/\n+/g, " ")}`)].join("\n");
+    const btnEl = ev.currentTarget;
+    try { await navigator.clipboard.writeText(lines); btnEl.textContent = "Copied"; }
+    catch { btnEl.textContent = "Copy didn't work"; }
+    setTimeout(() => { btnEl.textContent = "Copy list"; }, 1800);
+  }});
+}
+
+function section(b, list, withCopy) {
+  return el("section", { class: "section" },
+    el("div", { class: "section-head" },
+      el("h2", {}, el("span", { class: "badge", text: b.badge }), el("span", { text: b.name })),
+      el("div", { class: "row" },
+        el("span", { class: "count", text: `${list.length} idea${list.length === 1 ? "" : "s"}` }),
+        withCopy && list.length ? copyButton(b, list) : null)),
+    list.length
+      ? el("ul", { class: "list" }, ...list.map(ideaItem))
+      : el("p", { class: "empty", text: `No ideas for ${b.name} yet. Write one above and pick ${optionLabel(b)}.` }));
+}
+
+function renderBoard() {
+  const board = $("board");
+  const editFocused = document.activeElement && document.activeElement.id === "edit-text";
+  let content;
+  if (!loaded) {
+    content = el("p", { class: "empty", text: db === null && dbChecked ? "Saved ideas can't load in this view." : "Loading your saved ideas…" });
+  } else if (view === "all") {
+    const groups = BRANCHES.map(b => [b, ideas.filter(i => i.branch === b.key)]).filter(([, l]) => l.length);
+    content = groups.length
+      ? el("div", { style: "display:grid;gap:24px" }, ...groups.map(([b, l]) => section(b, l, false)))
+      : el("p", { class: "empty", text: "No ideas saved yet. Write one above, choose the exec position, and tap Save. It will show up here and on that position's tab." });
+  } else {
+    const b = BY_KEY[view];
+    content = section(b, ideas.filter(i => i.branch === b.key), true);
+  }
+  board.replaceChildren(content);
+  if (editFocused) { const t = $("edit-text"); if (t) t.focus(); }
+  flashId = null;
+}
+
+function render() { renderTabs(); renderBoard(); }
+
+let dbChecked = false;
+let unsub = null;
+function subscribe() {
+  if (unsub) unsub();
+  unsub = db.collection("ideas").orderBy("createdAt", "desc").limit(1000).onSnapshot(snap => {
+    ideas = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => typeof i.text === "string" && BY_KEY[i.branch]);
+    loaded = true;
+    showBanner("");
+    if (editing && !ideas.some(i => i.id === editing.id)) editing = null;
+    render();
+  }, err => {
+    if (err && err.code === "unavailable") { setTimeout(subscribe, 3000); return; }
+    showBanner("Lost the connection to your saved ideas. Reload the page to reconnect.");
+  });
+}
+
+render();
+
+(async () => {
+  try { db = window.claude && window.claude.use ? await window.claude.use("db") : null; }
+  catch { db = null; }
+  dbChecked = true;
+  if (!db) {
+    btn.textContent = "Save";
+    showBanner("Saving is off in this view. Open this page in the Claude app or at claude.ai while signed in. Anything you type stays on this phone until then.");
+    render();
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = "Save idea";
+  subscribe();
+})();
+</script>
