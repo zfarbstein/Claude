@@ -143,6 +143,9 @@ def name_matches(roster, name_on_source):
         return False
     last_ok = norm(roster["last"]) in {words[-1], "".join(words[1:]), "".join(words[-2:])}
     first_ok = words[0] in first_names(roster["first"], roster["informal"])
+    # "B. Scott LaMont" style: legal first initial, then a middle name.
+    if len(words[0]) == 1 and len(words) >= 3 and words[0] == norm(roster["first"])[:1]:
+        first_ok = True
     return last_ok and first_ok
 
 

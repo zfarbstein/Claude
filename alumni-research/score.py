@@ -21,7 +21,8 @@ A candidate is VERIFIED only when ALL of these hold:
   4. No other candidate found for the same person also passes 1 and 2a/2b/2c
      at the UF level (two plausible UF people with that name = ambiguous).
   5. The job facts themselves come with a source URL.
-  6. Every quote used above was read from the page itself, not from a
+  6. Every quote used above was read from the page itself (fetch.py saves a
+     copy and the quote must appear in it word for word), not from a
      search-engine summary.
 
 Anything else is NEEDS REVIEW (a lead with its evidence) or NOT FOUND.
@@ -31,13 +32,15 @@ import re
 from urllib.parse import urlparse
 
 from common import EVIDENCE, OUTPUT, QUEUE, name_matches, same_city
+from fetch import quote_on_page
 
 
 def has(anchor):
     """An anchor counts only if it carries a URL and a verbatim quote that was
     read from the page itself. Search-engine summaries can be wrong, so quotes
     taken only from a summary ("fetched": false) never count toward VERIFIED."""
-    return bool(anchor and anchor.get("url") and anchor.get("quote") and anchor.get("fetched"))
+    return bool(anchor and anchor.get("url") and anchor.get("quote") and anchor.get("fetched")
+                and quote_on_page(anchor["url"], anchor["quote"]))
 
 
 def domain_of(url):

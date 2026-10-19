@@ -3,7 +3,9 @@
     python3 -m unittest test_score
 """
 import unittest
+from unittest import mock
 
+import score
 from score import decide
 
 PERSON = {
@@ -28,6 +30,20 @@ def status(*cands):
 
 
 class Rules(unittest.TestCase):
+    def setUp(self):
+        # Pretend every page was downloaded and contains the quoted text.
+        patcher = mock.patch.object(score, "quote_on_page", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_quote_missing_from_saved_page_does_not_count(self):
+        with mock.patch.object(score, "quote_on_page", return_value=False):
+            self.assertEqual(status(cand(email_match=anchor("jsample@acmelaw.com"))), "NEEDS REVIEW")
+
+    def test_first_initial_plus_middle_name_accepted(self):
+        c = cand(name="J. Robert Sample", uf_education=anchor("UF"), delta_chi=anchor("Delta Chi"))
+        self.assertEqual(status(c), "VERIFIED")
+
     def test_name_alone_is_never_enough(self):
         self.assertEqual(status(cand()), "NEEDS REVIEW")
 
