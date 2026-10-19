@@ -1,0 +1,4 @@
+# Everything in data/ is personal information (addresses, birthdays, phones,
+# research results). It must never be committed.
+data/
+__pycache__/
