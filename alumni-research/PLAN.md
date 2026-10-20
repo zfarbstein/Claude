@@ -20,7 +20,7 @@ coverage: a wrong employer sends someone to the wrong person.
 | Free-plan test (100 people) | 0 verified, 50 needs review, 50 not found |
 | Test leads vs the team's answers | 19 agree, 2 disagree (both look like recent job changes), 6 no employer |
 | PDL credits (free, Oct 2026) | 100 of 100 used (51 test, 13 Phase 0, 36 Phase 0b) |
-| PDL Pro (Oct 2026) | 306 of 350 used (Phase 3 check + all three groups under 65); 44 left |
+| PDL Pro (Oct 2026) | 341 of 350 used (Phase 3 check, all alumni under 65, ages 65–70); 9 left |
 
 Why nothing verified: on the free plan all 50 matches came from name lookups
 (0 of 53 email and 0 of 68 phone lookups matched), and no match included a
@@ -343,6 +343,18 @@ Phase 0b already passed the go/no-go (24 of 51 verified, no wrong person).
   --promote` filled the team's job columns on 183 rows (Research Status
   `AI Verified`); the rest were blocked by team values, a non-blank Research
   Status, or a possibly outdated job.
+
+**Ages 65–70 (2026-10-20), 150 people, user's choice for the leftover credits:**
+- 34 credits (20 email, 2 phone, 12 name), 21 verified (13 by email, 7 name,
+  1 phone), 13 needs review, 116 no match or no job.
+- Under 65, the team's Research Status predicted yield best: 71% of credits
+  on "Not Started" people verified someone, vs. 43% "Unable to Find", 50%
+  blank, 0% "Unable to Verify". `enrich_pdl.py` now looks up Not Started
+  people first (then email, phone, name, younger first).
+- The run was stopped once mid-request (Ctrl-C) to re-order it; PDL then
+  showed one credit fewer than the ledger, so a request cut off mid-response
+  may still be charged. Don't interrupt a run; use `--max-matches`.
+- 9 credits left (PDL header; ledger says 10).
 3. Next month: buy only what's needed, resume (the script skips people with
    evidence).
 
