@@ -456,7 +456,7 @@ def print_setup(ws, landscape=True, pages_wide=1, title_rows=None):
 # Column name -> width. Each people tab picks its columns from here, most useful first (iPhone shows the
 # first few columns; Name stays on screen when scrolling right).
 WIDTH = {"Name": 22, "Score": 8, "Job Title": 30, "Employer": 26, "Field": 30, "Job Type": 26, "Location": 20,
-         "Notes": 26, "Email": 30, "Phone": 15, "LinkedIn": 36, "LinkedIn Username": 24, "Initiated": 11,
+         "Notes": 26, "Email": 30, "Phone": 15, "LinkedIn": 44, "LinkedIn Username": 24, "Initiated": 11,
          "Why This Score": 28, "Seniority": 30, "State": 16, "Industry (as listed)": 26, "Time at Employer": 16,
          "Previous Employers": 34, "Source": 27, "Info As Of": 16, "Last Name": 16, "Status": 29,
          "Why It Needs Review": 44, "Decision (fill in)": 17, "Reviewer Notes (fill in)": 28,
@@ -521,7 +521,7 @@ def people_table(ws, name, people, columns, color, top=1):
                 if r["linkedin"]:
                     # The full address, not "LinkedIn profile": phone previews that can't follow
                     # spreadsheet links can still long-press, copy or auto-link a visible address.
-                    link(cell, r["linkedin"], urllib.parse.unquote(r["linkedin"]))
+                    link(cell, r["linkedin"], urllib.parse.unquote(r["linkedin"].replace("https://", "")))
                 else:
                     q = urllib.parse.quote_plus(f"{r['first']} {r['last']} University of Florida")
                     link(cell, f"https://www.linkedin.com/search/results/people/?keywords={q}", "Search LinkedIn")
