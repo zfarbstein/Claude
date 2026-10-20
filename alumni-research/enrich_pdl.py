@@ -10,6 +10,8 @@ For each person in data/queue.jsonl without an evidence file:
 PDL only charges for matches. --max-matches stops before the plan runs out.
 This is for members contacting alumni about jobs, so by default PDL only
 returns (and charges for) people with a current job title and employer.
+People with a roster email go first, then phone only, then name only: name-only
+lookups verify the fewest people per credit, so a short budget cuts those.
 
 PDL scores a correct email-only match 4-6 out of 10, so each kind of lookup
 has its own minimum (MIN_LIKELIHOOD). A wrong phone match (recycled number)
@@ -218,6 +220,7 @@ def main():
         people = [p for p in people if p["age"] is not None and p["age"] >= args.min_age]
     if args.max_age is not None:
         people = [p for p in people if p["age"] is not None and p["age"] <= args.max_age]
+    people.sort(key=lambda p: 0 if p["email"] else 1 if len(p["phone"]) == 10 else 2)
 
     EVIDENCE.mkdir(parents=True, exist_ok=True)
     month = dt.date.today().strftime("%Y-%m")

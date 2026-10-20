@@ -106,19 +106,32 @@ match rates there. (Ask the team what "Unc" means.)
 - Only people **with a current job listed**: every lookup sends
   `required=job_title AND job_company_name` (the default), so PDL neither
   returns nor charges for anyone without one.
-- **Under 60 first** (`--max-age 59`), then 60+.
+- **Under 65** (`--max-age 64`), on **one $98 month** (350 credits). 65+ only
+  if credits are left or the user decides later.
+- Order within the run: roster email first, then phone only, then name only
+  (the script does this), so a short budget cuts the lowest-value lookups.
 
-| Run | Alumni left | Email / phone only / neither | Credits (est.) | Cost |
-|---|---|---|---|---|
-| 1. Under 60 | 718 (+ ~19 test people to redo) | 328 / 141 / 249 | ~300 | first $98 month |
-| 2. 60 and over | 671 | 217 / 281 / 173 | ~220 | second $98 month |
-| Unknown age | 14 | | small | with run 2 |
+Projection, alumni aged 22–64 not yet looked up (894, incl. 21 test people to
+redo on Pro; the 20 already verified/reviewed in Phase 0b aren't repeated):
 
-Credits assume about 45% / 30% / 40% of email / phone-only / name-only people
-match with a job listed (fewer in the older group). Expected from run 1:
-~165 verified and ~110 needs-review leads with a job (~80 of those confirmed
-by the team), so ~245 contactable alumni for ~$98. Run 2 adds roughly ~150.
-Two $98 months (700 credits) should cover both runs with room to spare.
+| Group | People | Charged (has a job) | Credits | Cost | Verified | Needs review w/ job | Team confirms (est.) | No match / no job (free) |
+|---|---|---|---|---|---|---|---|---|
+| Email | 381 | ~45% | ~171 | ~$48 | ~114 (30%) | ~57 | ~43 (75%) | ~210 |
+| Phone only | 214 | ~30% | ~64 | ~$18 | ~43 (20%) | ~21 | ~13 (60%) | ~150 |
+| Name only | 299 | ~40% | ~120 | ~$34 | ~45 (15%) | ~75 | ~52 (70%) | ~179 |
+| **Total** | **894** | | **~355** | **~$99** | **~202** | **~153** | **~108** | **~539** |
+
+- **~310 contactable alumni** (202 verified + ~108 confirmed in review), about
+  **$0.32 each**.
+- 350 credits is right at the estimate. If match rates run 25% high (~445
+  credits), the money runs out partway through the name-only group, leaving
+  roughly 90–100 of those people. Finish them next month, or raise the
+  plan's credits (~$0.28 each).
+- Not in this run: 65+ (519 alumni: 164 / 220 / 135) ≈ 170 credits for ~97
+  verified + ~48 confirmed; unknown age (16) ≈ 6 credits.
+- Rates: email from the Phase 0b re-run (24 people the team hadn't
+  researched); phone-only and name-only extrapolated. "Team confirms" counts a
+  relative sharing the email/phone as wrong.
 
 ### Earlier estimate (all 1,502, before the scope decisions)
 
@@ -236,7 +249,7 @@ out. Free-plan evidence from the first test is kept in `data/evidence_free_v1/`.
    - `include_if_matched=true`; store the matched inputs in evidence and the
      saved page text, so `score.py` can use "email matched" as proof.
    - Per-input thresholds from Phase 0: email 4, phone 7, name 8.
-   - `--max-age` / `--min-age` to run under 60 first.
+   - `--max-age` / `--min-age` to run under 65 first.
    - `--budget N` that counts matches across runs (read existing evidence), so
      a resumed run can't overspend.
    - Read `PDL_API_KEY`, falling back to `DL_API_KEY`, until the setting is
@@ -263,16 +276,17 @@ User buys Pro at 350 credits/month and renames the environment variable to
 ### Phase 3: Pro check (small)
 Phase 0b already passed the go/no-go (24 of 51 verified, no wrong person).
 1. Check the key works and the plan is Pro: one lookup on a test person; the
-   response should include a location and contact fields.
-2. Re-run the ~50 test people without an email (their old evidence is in
-   `data/evidence_free_v1/`) to measure the phone-only and name-only paths
-   with location data. ~40 credits.
-3. Report to the user before Phase 4.
+   response should include a location and contact fields, and a test with
+   `required` should return 404 for someone with no job.
+2. No separate re-test: the 21 test people under 65 still to redo are in the
+   main run, and the email-first order measures each path as it goes.
+3. After the email group (~170 credits), report verified counts to the user
+   and compare with the projection before continuing.
 
 ### Phase 4: main run
-1. `prepare.py todo` (alumni only); `enrich_pdl.py --max-age 59 --max-matches
-   <credits left>`; then, next month, `--min-age 60`, then the unknown-age
-   people with neither flag. The job-required filter is on by default.
+1. `prepare.py todo` (alumni only); `enrich_pdl.py --max-age 64 --max-matches
+   <credits left>`. The job-required filter and email → phone → name order are
+   on by default. 65+ (`--min-age 65`) and unknown age only if the user says.
 2. Stop at the month's remaining credits. Report: people done, left, credits
    used, verified so far.
 3. Next month: buy only what's needed, resume (the script skips people with
