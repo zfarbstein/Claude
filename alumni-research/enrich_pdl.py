@@ -82,6 +82,11 @@ def lookup(key, params, min_likelihood, tries=6):
             return lookup(key, params, min_likelihood, tries - 1)
         body = e.read().decode(errors="replace")[:300]
         raise SystemExit(f"PDL error {e.code}: {body}")
+    except (urllib.error.URLError, ConnectionError, TimeoutError):
+        if tries <= 1:  # e.g. connection reset during the handshake: nothing was sent
+            raise
+        time.sleep(2 ** (7 - tries))
+        return lookup(key, params, min_likelihood, tries - 1)
 
 
 def year(date):

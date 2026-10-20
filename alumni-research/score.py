@@ -35,8 +35,9 @@ import json
 import re
 from urllib.parse import urlparse
 
-from common import EVIDENCE, OUTPUT, QUEUE, name_matches, same_city
+from common import EVIDENCE, OUTPUT, QUEUE, name_matches, read_roster, same_city
 from fetch import quote_on_page
+from prepare import person as roster_person
 
 
 LOOKUP_MIN = {"email": 4, "phone": 7}
@@ -183,9 +184,15 @@ def decide(person, ev):
 def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     counts = {}
+    people = {p["row"]: p for p in map(json.loads, open(QUEUE))}
+    # Also score people researched under an earlier queue (e.g. the pilot).
+    rows = read_roster()
+    for path in EVIDENCE.glob("*.json"):
+        row = int(path.stem)
+        if row not in people and 2 <= row < len(rows) + 2:
+            people[row] = roster_person(row, rows[row - 2])
     with open(OUTPUT / "results.jsonl", "w") as out:
-        for line in open(QUEUE):
-            person = json.loads(line)
+        for person in sorted(people.values(), key=lambda p: p["row"]):
             path = EVIDENCE / f"{person['row']}.json"
             ev = json.load(open(path)) if path.exists() else None
             result = {"row": person["row"], "name": f"{person['first']} {person['last']}", **decide(person, ev)}

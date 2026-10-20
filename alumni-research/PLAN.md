@@ -19,8 +19,8 @@ coverage: a wrong employer sends someone to the wrong person.
 | Full-run queue | 1,552 people; 50 already have evidence from the test, so **1,502 left** |
 | Free-plan test (100 people) | 0 verified, 50 needs review, 50 not found |
 | Test leads vs the team's answers | 19 agree, 2 disagree (both look like recent job changes), 6 no employer |
-| PDL credits this month | 100 of 100 free used (51 test, 13 Phase 0, 36 Phase 0b) |
-| Known setup bug | Environment variable is named `DL_API_KEY`; scripts read `PDL_API_KEY` |
+| PDL credits (free, Oct 2026) | 100 of 100 used (51 test, 13 Phase 0, 36 Phase 0b) |
+| PDL Pro (Oct 2026) | 207 of 349 usable used (Phase 3 check + email group); 142 left |
 
 Why nothing verified: on the free plan all 50 matches came from name lookups
 (0 of 53 email and 0 of 68 phone lookups matched), and no match included a
@@ -283,6 +283,18 @@ Phase 0b already passed the go/no-go (24 of 51 verified, no wrong person).
 3. After the email group (~170 credits), report verified counts to the user
    and compare with the projection before continuing.
 
+**Phase 3 results (2026-10-20): passed, 1 credit.**
+- Key is `PDL_API_KEY` now. PDL's response headers show a paid key: rate
+  limit 500/min, `X-TotalLimit-Purchased-Remaining: 350`. Before anything was
+  spent, `X-TotalLimit-Remaining` already read **349**, so the usable
+  balance is one less than bought. The headers come back on a 404 too, so
+  checking the balance is free.
+- `required=job_title AND job_company_name` on 3 people PDL had matched by
+  email (likelihood 6) on the free plan with no job: all 404, credits spent 0.
+- One email lookup on a main-run person (cached, so the run reused it): 200,
+  and city/region, work and personal emails, mobile phone and LinkedIn all
+  came back unmasked.
+
 ### Phase 4: main run
 1. `prepare.py todo` (alumni only), then one contact group at a time, each
    capped at the credits left (`--max-matches`): `enrich_pdl.py --max-age 64
@@ -292,6 +304,26 @@ Phase 0b already passed the go/no-go (24 of 51 verified, no wrong person).
    and unknown age only if the user says.
 2. Stop at the month's remaining credits. Report: people done, left, credits
    used, verified so far.
+
+**Email group results (2026-10-20), ages 22–64, 381 people:**
+
+| | Projected | Actual |
+|---|---|---|
+| Charged (has a job) | ~171 (45%) | **207 (54%)**: 124 by email, 42 phone, 41 name (incl. the Phase 3 credit) |
+| Verified | ~114 (30%) | **142 (37%)**: 86 by email, 26 phone, 30 name |
+| Needs review w/ job | ~57 | 65 (35 a different first name, i.e. a relative on the shared email/phone; 30 not enough proof or a grad-year clash) |
+| No match / no job (free) | ~210 | 174 |
+
+- Name-only lookups now verify on Pro (30), because location comes back.
+- Of the 142 verified, 100 hold a degree job, 36 unclear, 6 no degree; 10 have
+  no job start date and 8 have data over 2 years old (flagged).
+- Spot check of 10 random verified: all consistent (name, UF years, roster
+  city or birth year).
+- 142 credits left (PDL header). Match rates ran ~21% over the projection, so
+  phone (~64 projected → ~77) plus name (~120 → ~145) won't both fit: expect
+  to finish phone and stop roughly halfway through name.
+- The first run died on a connection reset (TLS handshake, nothing sent or
+  charged); `enrich_pdl.py` now retries network errors.
 3. Next month: buy only what's needed, resume (the script skips people with
    evidence).
 
@@ -398,10 +430,12 @@ Appended after the team's columns, one row per roster row, regenerated from
 | NOT FOUND | blank | "no confident match" |
 | not searched | blank (AI Status blank) | blank |
 
-Additions to `export.py`:
+Additions to `export.py` (done except TEAM CONFIRMED/REJECTED, which need
+`review.py`; flags go in a new `AI Flags` column):
 - `AI Status` gains `TEAM CONFIRMED` / `TEAM REJECTED` from review decisions
   (5.4).
-- Flag `possibly outdated` in `AI Data As Of` when the data is over 2 years old.
+- Flag `possibly outdated` in `AI Data As Of` when the data is over 2 years old
+  or the job has no start date.
 - Flag `differs from team` when the team has an employer and the AI one doesn't
   match (the team's value stays; this only marks it for a look).
 
@@ -413,7 +447,10 @@ LinkedIn Profile) are filled only when **all** hold:
 2. every one of those team columns is blank for that row;
 3. Research Status is blank or "Not Started";
 4. the user has approved promotion in the current session, after seeing the
-   count of rows it would change.
+   count of rows it would change;
+5. the job isn't flagged `possibly outdated`.
+
+`python3 export.py` prints the count; `python3 export.py --promote` writes it.
 
 Then, in the team's formats:
 - Years at Current Company: whole years from the start date (e.g. `3`).
