@@ -121,9 +121,29 @@ a listed job aren't charged); use it for 65+ at least.
 Month 1 ($98, 350 credits): ages 40–64 with email or phone first. Month 2 on:
 buy what's left; the ledger shows usage.
 
-Expected outcome, people searched: verified ~35–45% (47% among people with an
-email; lower for phone-only and name-only), needs review ~30%, not found
-~25–30%.
+Projected outcome for the 1,502 left, by contact info (2026-10-20). Rates use
+the test people the team had **not** researched (the pool the rest come
+from); the team's researched people verified far more often (18 of 27 vs. 6
+of 24) and would overstate it. Email rates are measured on 24 people; phone-only
+and neither are extrapolated until Phase 3 measures them.
+
+| Segment | People | Verified | Needs review | Not found |
+|---|---|---|---|---|
+| Email, age 23+ | 553 | ~30% (166) | ~45% (249) | ~25% (138) |
+| Email, under 23 (students) | 92 | ~10% (9) | ~40% (37) | ~50% (46) |
+| Phone only (53% are 65+) | 426 | ~20% (85) | ~25% (107) | ~55% (234) |
+| Neither (name only; Pro needed) | 431 | ~15% (65) | ~40% (172) | ~45% (194) |
+| **Total** | **1,502** | **~325 (22%)** | **~565 (38%)** | **~610 (41%)** |
+
+Needs review is mixed. In the re-run, 6 of 19 were a **relative** sharing the
+roster email or phone (spouse or parent: different first name), 9 the right
+person with no job listed, 4 the right person with a job. Projected for the
+~565: ~195 (35%) become a confirmed job after team review, ~190 are the right
+person with no job info, ~180 are a relative or wrong person. Relatives are
+rejected by the name rule but still cost a credit.
+
+Net: ~520 usable answers (~35% of the 1,502), plus the ~275 the team already
+has. Range for verified: ~280–400.
 
 ## 4. Phases
 
