@@ -334,14 +334,38 @@ distinctive names, 1 common):
 sheet (5.4); the team opens the LinkedIn link and marks correct or wrong. The
 survey (section 9) covers the rest; self-reported answers count as verified.
 
-**6d. Career value.** Store PDL's `job_title_levels` (owner, partner, cxo,
-vp, director, manager, senior, …), company and industry; for registry and web
-leads, derive the level from the title and license. Add an `AI Seniority`
-column; sort the review sheet and the final contact list by it (partner /
-owner / C-level / VP / director / licensed professional first). Web research
-goes in age order 35–64, then 22–34 (established careers first). A lead whose
-job is clearly entry-level or unrelated to a career path is recorded and not
-researched further. The user defines "good career" precisely (section 8).
+**6d. Career value.** Decided by the user: a good career is **a job that
+needs a college degree**. `careers.py` decides it from the U.S. Department of
+Labor's O*NET data (job zone 4–5 = bachelor's or more), plus a seniority level
+from the title. It says "no degree" only when the O*NET title covers most of
+the job title and it isn't manager level; anything unclear is kept. Checked on
+the 53 titles found so far plus controls (bartender, sales associate, real
+estate agent, police, firefighter → no degree; engineer, nurse, teacher,
+attorney, executives → degree). In the Phase 0b test, 20 of 24 verified alumni
+have degree jobs, 4 unclear, 0 no-degree. `export.py` writes `AI Degree Job`
+(yes / no / unclear) and `AI Seniority`.
+
+Where work is skipped for no-degree jobs ("don't spend a token on a bad job"):
+- **Web research (6b):** classify the title as soon as a lead is found; if
+  it's "no degree", record it and stop (no more searches or page fetches for
+  that person).
+- **Registries (6a):** only degree professions: NPI, BrokerCheck, Florida Bar,
+  and DBPR limited to CPAs, engineers, architects, pharmacists (not real
+  estate sales associates or contractors).
+- **Team review (5.4):** no-degree leads are left off the review sheet.
+- **Contact list:** no-degree jobs left off; the rest sorted by seniority
+  (owner/partner/C-level, VP, director, manager, senior), then by fit with
+  members' majors.
+- **PDL:** can't skip; the job isn't known until the match is paid for. The
+  job-required filter already skips people with no job.
+
+Members' majors (current brothers, counts only; the source file stays out of
+the repo): business / finance / accounting / marketing / economics ~27,
+engineering ~20, pre-law / political science ~8, health / bio / premed ~8,
+CS / data / statistics ~5, sport and construction management ~6. Industries
+matching these rank higher at equal seniority.
+
+Web research goes in age order 35–64, then 22–34 (established careers first).
 
 ---
 
@@ -445,7 +469,7 @@ columns with `AI Status = SELF-REPORTED` and are eligible for 5.3.
 
 ## 8. Decisions waiting on the user
 - Send date of birth to PDL as a lookup input? (default no)
-- What counts as a "good career" for the contact list: a minimum level
+- Good career = needs a college degree (decided). Still open: a minimum level
   (e.g. manager and up, or any licensed professional), industries to
   favor, and whether to keep everyone but sorted, or drop the rest?
 - Run web research (6b) with parallel subagents (faster, uses more of the

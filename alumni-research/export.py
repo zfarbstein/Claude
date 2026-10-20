@@ -9,11 +9,12 @@ lead and the reason it was not verified, so a person can check it.
 import csv
 import json
 
+from careers import LEVEL_NAMES, classify
 from common import OUTPUT, read_roster
 
 AI_COLUMNS = ["AI Status", "AI Job Title", "AI Employer", "AI Industry", "AI Previous Employers",
               "AI Years at Company", "AI City", "AI State", "AI LinkedIn", "AI Data As Of", "AI Evidence",
-              "AI Why Not Verified", "AI Sources"]
+              "AI Why Not Verified", "AI Sources", "AI Degree Job", "AI Seniority"]
 FACT_KEYS = ["title", "employer", "industry", "previous_employers", "years_at_company", "city", "state", "linkedin", "as_of"]
 
 
@@ -41,6 +42,10 @@ def main():
                 extra["AI Why Not Verified"] = "; ".join(r.get("why_not_verified", []))
                 srcs = [s["url"] if isinstance(s, dict) else s for s in r.get("sources", [])]
                 extra["AI Sources"] = " ".join(srcs)
+                if facts.get("title"):
+                    c = classify(facts["title"])
+                    extra["AI Degree Job"] = {True: "yes", False: "no", None: "unclear"}[c["degree"]]
+                    extra["AI Seniority"] = LEVEL_NAMES[c["level"]]
             w.writerow({**row, **extra})
     print(f"wrote {out}")
 
