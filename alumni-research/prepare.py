@@ -41,6 +41,7 @@ def person(rownum, r):
         "email": email,
         "work_email_domain": domain if domain and domain not in GENERIC_EMAIL_DOMAINS else "",
         "phone": re.sub(r"\D", "", r["Primary Phone"])[-10:],
+        "research_status": r["Research Status"].strip(),
     }
 
 
