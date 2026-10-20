@@ -479,7 +479,9 @@ def write_people(ws, name, people, columns, color, wrap):
                     cell.value = r["phone"]
             elif h == "LinkedIn":
                 if r["linkedin"]:
-                    link(cell, r["linkedin"], "LinkedIn profile")
+                    # The address itself, not "LinkedIn profile": phone previews that can't follow
+                    # spreadsheet links can still long-press, copy or auto-link a visible address.
+                    link(cell, r["linkedin"], urllib.parse.unquote(r["linkedin"].replace("https://www.", "")))
                 else:
                     q = urllib.parse.quote_plus(f"{r['first']} {r['last']} University of Florida")
                     link(cell, f"https://www.linkedin.com/search/results/people/?keywords={q}", "Search LinkedIn")
@@ -517,21 +519,22 @@ def build_workbook(recs, out):
     dws.sheet_properties.tabColor = RED
     DIR_COLS = [("Last Name", 16), ("First Name", 13), ("Field", 42), ("Job Type", 36), ("Job Title", 38),
                 ("Employer", 32), ("Notes", 34), ("Seniority", 35), ("City", 18), ("State", 20), ("Email", 32),
-                ("Phone", 16), ("LinkedIn", 18), ("Initiated", 13), ("Industry (as listed)", 28),
+                ("Phone", 16), ("LinkedIn", 34), ("Initiated", 13), ("Industry (as listed)", 28),
                 ("Time at Employer", 18), ("Previous Employers", 40), ("Source", 29), ("Info As Of", 20)]
     write_people(dws, "AlumniDirectory", main, DIR_COLS, RED,
-                 wrap={"Job Title", "Employer", "Notes", "Previous Employers", "Industry (as listed)", "Time at Employer"})
+                 wrap={"Job Title", "Employer", "Notes", "Previous Employers", "Industry (as listed)", "Time at Employer",
+                       "LinkedIn"})
 
     # ---------------------------------------------------------------- Needs Review
     rws = wb.create_sheet("Needs Review")
     rws.sheet_properties.tabColor = AMBER
     RV_COLS = [("Last Name", 16), ("First Name", 13), ("Status", 29), ("Why It Needs Review", 58),
-               ("Decision (fill in)", 17), ("Reviewer Notes (fill in)", 30), ("LinkedIn", 18), ("Field", 42),
+               ("Decision (fill in)", 17), ("Reviewer Notes (fill in)", 30), ("LinkedIn", 34), ("Field", 42),
                ("Job Type", 36), ("Possible Job Title", 38), ("Possible Employer", 32), ("Seniority", 35), ("City", 18),
                ("State", 20), ("Email", 32), ("Phone", 16), ("Initiated", 13), ("Industry (as listed)", 28),
                ("Time at Employer", 18), ("Previous Employers", 40), ("Notes", 30), ("Info As Of", 20)]
     h = write_people(rws, "NeedsReview", review, RV_COLS, AMBER,
-                     wrap={"Why It Needs Review", "Reviewer Notes (fill in)", "Notes", "Previous Employers",
+                     wrap={"Why It Needs Review", "Reviewer Notes (fill in)", "Notes", "Previous Employers", "LinkedIn",
                            "Possible Job Title", "Possible Employer", "Industry (as listed)", "Time at Employer"})
     dcol = get_column_letter(h.index("Decision (fill in)") + 1)
     ncol = get_column_letter(h.index("Reviewer Notes (fill in)") + 1)
@@ -627,6 +630,9 @@ def build_workbook(recs, out):
                  "example Field = Law, or Job Type = Engineering."),
         ("text", "Windows: select a heading and press Alt + Down Arrow to open its filter menu. Mac: Option + Down "
                  "Arrow. Ctrl + Shift + L (Mac: Cmd + Shift + F) turns the filter buttons on or off."),
+        ("text", "On a phone, open the file in the free Excel or Google Sheets app. Quick previews (from a text, "
+                 "email or the Files app) show the file but don't let you tap its links; there you can long-press "
+                 "or copy an address instead."),
         ("text", "Phone (Excel app): tap a heading, then the filter icon. Google Sheets: use Data > Create a filter."),
         ("text", "The directory starts sorted by Field, then Seniority (most senior first), then last name. To get "
                  "back to it: sort Last Name A to Z, then Seniority A to Z, then Field A to Z (Other / Unknown will "
