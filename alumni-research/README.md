@@ -43,6 +43,11 @@ python3 score.py && python3 evaluate.py && python3 export.py
 The plan for the paid run (budget, phases, how results go into the sheet) is in
 [PLAN.md](PLAN.md).
 
+`python3 directory.py` turns the results into the brothers' career directory
+(`data/output/alumni_directory.xlsx`): confirmed alumni sortable by Field and
+Job Type, a Needs Review tab for everyone not yet confirmed, and counts. Field
+and Job Type labels live in `data/directory_labels.json`.
+
 For the full run, use `python3 prepare.py todo` instead of the pilot, and set
 `--max-matches` to what the plan has left. PDL only charges for matches, and
 people who already have an evidence file are skipped, so the run can be

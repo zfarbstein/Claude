@@ -265,7 +265,8 @@ out. Free-plan evidence from the first test is kept in `data/evidence_free_v1/`.
    gives a free, measured verified rate.
 5. `export.py`: changes in section 5.
 6. `review.py` (new): builds the review sheet and merges decisions back
-   (section 5).
+   (section 5). The Needs Review tab of `directory.py`'s workbook now serves as
+   the review sheet; `review.py` only needs to merge its Decision column.
 7. Unit tests pass; dry run (`--dry-run`) on the pilot queue shows the lookup
    order without calling PDL.
 
@@ -360,6 +361,29 @@ Phase 0b already passed the go/no-go (24 of 51 verified, no wrong person).
 
 ### Phase 5: score, export, and the sheet
 Follow section 5.
+
+### Brothers' career directory (2026-10-20)
+`directory.py` builds `data/output/alumni_directory.xlsx` (personal data; never
+committed): Start Here, Alumni Directory (451: 214 research-team Complete/Partial
++ 237 verified), Needs Review (175, each with a plain reason and Decision /
+Reviewer Notes columns for the team), Fields at a Glance.
+- Field (25) and Job Type (22) labels were made by 4 agents and checked by 4
+  others (12 corrections proposed, 10 kept), then audited by hand; stored in
+  `data/directory_labels.json`. New people need labels before a new version.
+- Left out on purpose: the team's Additional Info notes (internal matching
+  notes, addresses, one surname remark, a volunteer's comment with a phone
+  number), dates of birth, street addresses; relatives' records keep no job,
+  name or LinkedIn (46 rows say only that the record was a family member's).
+- Moved to Needs Review although the team marked them Complete/Partial: 6 whose
+  own notes doubt the match or job, 1 "Unemployed". Shown as Needs Review: 13
+  team rows with notes but no job.
+- Excluded: roster row 472 (team note records his death; Research Status still
+  says Partial). **Ask the team to set it to Deceased.** Also in the roster: a
+  volunteer's "... stop here" bookmark in one Current Job Title cell.
+- Three independent reviews (data, accessibility, privacy) and a recheck
+  found 0 remaining must-fix issues.
+- Team decisions come back in the Needs Review tab's Decision column; merge
+  them per 5.4 (review.py still to be written) and rebuild.
 
 ### Phase 6: everyone PDL didn't place (no match, or no job listed)
 Because lookups require a listed job, PDL people without one come back as "no

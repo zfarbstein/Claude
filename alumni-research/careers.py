@@ -29,11 +29,14 @@ MODIFIERS = {"senior", "sr", "junior", "jr", "lead", "principal", "staff", "chie
              "acting", "interim", "i", "ii", "iii", "iv", "1", "2", "3"}
 # Titles O*NET doesn't phrase the way LinkedIn does.
 SENIORITY = [  # (level, pattern), first match wins
+    # Unambiguous owner words first, so "Founder & Managing Director" isn't read as an MD.
+    (5, r"\b(founder|co-?founder|owner|ceo|proprietor)\b"),
     (4, r"\b(vp|svp|evp|avp|vice president|managing director)\b"),
     # "Chief Process Engineer", "Chief Pilot": senior specialists, not C-level.
     (1, r"\bch(ie|ei)f\b(?!.*\bofficer\b).*\b(engineer|pilot|resident|technician|scientist|architect)\b"),
-    (5, r"\b(managing member|general counsel|judge|justice|congressman|congresswoman|senator|mayor)\b"
-        r"(?<!associate general counsel)(?<!assistant general counsel)(?<!deputy general counsel)"),
+    # The office itself, not "Executive Assistant to the Mayor" or "Deputy General Counsel".
+    (5, r"^(?!.*\b(assistant|aide|staff|associate|deputy|office of|to the)\b).*"
+        r"\b(managing member|general counsel|judge|justice|congressman|congresswoman|senator|mayor)\b"),
     (5, r"\b(founder|co-?founder|owner|ceo|cfo|coo|cto|cio|cmo|chief|cheif|president|shareholder|proprietor)\b"
         r"|(^|\b(managing|senior|founding|equity|tax|audit|general|name|named) )partner\b"
         r"(?! (manager|success|relations|development|programs?|marketing|enablement|account))"),

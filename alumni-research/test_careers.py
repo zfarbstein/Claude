@@ -55,3 +55,6 @@ class Careers(unittest.TestCase):
         self.assertEqual(classify("Managing Director")["level"], 4)
         self.assertEqual(classify("Chief Process Control Engineer")["level"], 1)
         self.assertEqual(classify("Chief Operating Officer")["level"], 5)
+        self.assertEqual(classify("Executive Assistant to the Mayor")["level"], 0)
+        self.assertEqual(classify("Founder & Managing Director")["level"], 5)
+        self.assertEqual(classify("Deputy General Counsel")["level"], 0)
