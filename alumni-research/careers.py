@@ -30,8 +30,9 @@ MODIFIERS = {"senior", "sr", "junior", "jr", "lead", "principal", "staff", "chie
 # Titles O*NET doesn't phrase the way LinkedIn does.
 SENIORITY = [  # (level, pattern), first match wins
     (4, r"\b(vp|svp|evp|avp|vice president)\b"),
-    (5, r"\b(founder|co-?founder|owner|ceo|cfo|coo|cto|cio|cmo|chief|president)\b"
-        r"|^(managing |senior |founding |equity )?partner\b"),
+    (5, r"\b(founder|co-?founder|owner|ceo|cfo|coo|cto|cio|cmo|chief|president|shareholder|proprietor)\b"
+        r"|(^|\b(managing|senior|founding|equity|tax|audit|general|name|named) )partner\b"
+        r"(?! (manager|success|relations|development|programs?|marketing|enablement|account))"),
     (3, r"\b(director|head of)\b"),
     (2, r"\b(manager|supervisor|lead)\b"),
     (1, r"\b(senior|sr|principal)\b"),
