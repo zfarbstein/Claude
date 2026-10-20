@@ -151,8 +151,10 @@ def fix_text(v):
     lower = v == v.lower()
     def token(m):
         t = m.group(0)
-        if "." in t.strip(".,") or "@" in t:  # a web address or domain: leave it alone
-            return t
+        if "@" in t or re.search(r"(^www\.|\.(com|net|org|edu|gov|io|ai|co|us)\b)", t, re.I):
+            return t  # a web address or email: leave it alone
+        if re.fullmatch(r"([A-Za-z]\.){2,}[,]?", t):
+            return t.upper()  # j.p. -> J.P.
         def word(w):
             w = w.group(0)
             fix = TYPOS.get(w.lower())
@@ -201,6 +203,26 @@ def location(city, state):
     return city, full, ("Location uncertain" if uncertain else "")
 
 
+def own_name_variant(r, why):
+    """True when 'name on source ... does not match roster' is really him: a short form or
+    misspelling of his first name ('Chris' / 'Christopher', 'Jon' / 'John') or 'Last First' order."""
+    m = re.match(r"name on source '(.*)' does not match roster", why)
+    words = [norm(w) for w in re.findall(r"[A-Za-z]+", m.group(1))] if m else []
+    if not words:
+        return False
+    first, last = norm(r["Legal First Name"]), norm(r["Legal Last Name"])
+    informal = norm(r["Informal First Name"])
+    if words[0] == last and first in words[1:]:
+        return True
+    def close(a, b):
+        if not a or not b:
+            return False
+        if a[:3] == b[:3] or a.startswith(b) or b.startswith(a):
+            return True
+        return len(a) == len(b) and sum(x != y for x, y in zip(a, b)) <= 1
+    return any(close(words[0], n) for n in (first, informal))
+
+
 def phone(v):
     d = re.sub(r"\D", "", v or "")
     if len(d) == 11 and d[0] == "1":
@@ -214,9 +236,12 @@ def linkedin(v):
     v = clean(v)
     if not v or "linkedin.com" not in v.lower():
         return ""
-    v = v.split("?")[0].rstrip("/")
-    v = re.sub(r"^(https?://)?(www\.)?", "", v, flags=re.I)
-    return "https://www." + v
+    m = re.search(r"linkedin\.com/in/([^/?#]+)", v, re.I)
+    if not m:
+        return ""
+    # Profile root only (not ".../overlay/contact-info"), with the username percent-encoded.
+    slug = urllib.parse.quote(urllib.parse.unquote(m.group(1)), safe="-_.~")
+    return f"https://www.linkedin.com/in/{slug}"
 
 
 def years_text(v):
@@ -303,7 +328,7 @@ def build_records():
                        linkedin=linkedin(facts.get("linkedin")), as_of=month(facts.get("as_of")), source="ai", why="")
         elif res.get("status") == "NEEDS REVIEW":
             why_raw = res.get("why_not_verified") or []
-            relative = any(w.startswith("name on source") for w in why_raw)
+            relative = any(w.startswith("name on source") and not own_name_variant(r, w) for w in why_raw)
             reasons = []
             for w in why_raw:
                 g = re.match(r"UF graduation year (\d+) does not fit initiation (\d+)", w)
@@ -408,6 +433,8 @@ def seniority(r, lab):
 
 
 def score(r):
+    if "different person" in r.get("why", ""):
+        return None, ""  # probably someone else's job: nothing to rank
     s = scores.get(r["row"]) if (r["title"] or r["employer"]) else None
     return (s["score"], s["reason"]) if s else (None, "")
 
@@ -455,23 +482,24 @@ def print_setup(ws, landscape=True, pages_wide=1, title_rows=None):
 
 # Column name -> width. Each people tab picks its columns from here, most useful first (iPhone shows the
 # first few columns; Name stays on screen when scrolling right).
-WIDTH = {"Name": 22, "Score": 8, "Job Title": 30, "Employer": 26, "Field": 30, "Job Type": 26, "Location": 20,
-         "Notes": 26, "Email": 30, "Phone": 15, "LinkedIn": 44, "LinkedIn Username": 24, "Initiated": 11,
-         "Why This Score": 28, "Seniority": 30, "State": 16, "Industry (as listed)": 26, "Time at Employer": 16,
-         "Previous Employers": 34, "Source": 27, "Info As Of": 16, "Last Name": 16, "Status": 29,
-         "Why It Needs Review": 44, "Decision (fill in)": 17, "Reviewer Notes (fill in)": 28,
-         "Possible Job Title": 30, "Possible Employer": 26}
-WRAP = {"Job Title", "Employer", "Notes", "Previous Employers", "Industry (as listed)", "Time at Employer",
-        "LinkedIn", "Why This Score", "Why It Needs Review", "Reviewer Notes (fill in)", "Possible Job Title",
-        "Possible Employer", "Field", "Job Type"}
-PEOPLE = ["Name", "Score", "Job Title", "Employer", "Job Type", "Location", "Notes", "Email", "Phone", "LinkedIn",
-          "LinkedIn Username", "Initiated", "Why This Score", "Seniority", "Industry (as listed)",
+# An iPhone shows about 50 width units: the frozen Name plus roughly the next two columns, so every
+# column stays under ~34 units and the first ones are what a brother needs most.
+WIDTH = {"Name": 16, "Score (1-10)": 7, "Job Title": 22, "Employer": 20, "Field": 30, "Job Type": 31,
+         "Location": 18, "Notes": 26, "Email": 30, "Phone": 15, "LinkedIn": 30, "LinkedIn Username": 26,
+         "Initiated": 11, "Why This Score": 38, "Seniority": 31, "State": 16, "Industry (as listed)": 26,
+         "Time at Employer": 16, "Previous Employers": 34, "Source": 27, "Info As Of": 16, "Last Name": 16,
+         "Status": 29, "Why It Needs Review": 28, "Decision (fill in)": 17, "Reviewer Notes (fill in)": 28,
+         "Possible Job Title": 22, "Possible Employer": 20}
+WRAP = {"Name", "Job Title", "Employer", "Notes", "Why This Score", "Why It Needs Review",
+        "Reviewer Notes (fill in)", "Possible Job Title", "Possible Employer", "Field"}
+PEOPLE = ["Name", "Score (1-10)", "Job Title", "Employer", "LinkedIn", "LinkedIn Username", "Location", "Email",
+          "Phone", "Notes", "Job Type", "Initiated", "Why This Score", "Seniority", "Industry (as listed)",
           "Time at Employer", "Previous Employers", "Source", "Info As Of"]
 ALL = PEOPLE[:4] + ["Field"] + PEOPLE[4:] + ["State", "Last Name"]
-REVIEW = ["Name", "Status", "Why It Needs Review", "Decision (fill in)", "Reviewer Notes (fill in)", "Score",
-          "Possible Job Title", "Possible Employer", "Field", "Job Type", "Location", "LinkedIn", "LinkedIn Username",
+REVIEW = ["Name", "Why It Needs Review", "Possible Job Title", "Possible Employer", "Location", "LinkedIn",
+          "LinkedIn Username", "Decision (fill in)", "Reviewer Notes (fill in)", "Score (1-10)", "Field", "Job Type",
           "Email", "Phone", "Initiated", "Why This Score", "Industry (as listed)", "Time at Employer",
-          "Previous Employers", "Notes", "Info As Of", "State"]
+          "Previous Employers", "Notes", "Info As Of", "State", "Status"]
 
 
 def values(r):
@@ -483,7 +511,8 @@ def values(r):
     elif r["source"] == "team" and (r["title"] or r["employer"]):
         as_of = "Research team (2026)"
     return {
-        "Name": f"{r['first']} {r['last']}".strip(), "Last Name": r["last"], "Score": s, "Why This Score": why,
+        "Name": f"{r['first']} {r['last']}".strip(), "Last Name": r["last"], "Score (1-10)": s,
+        "Why This Score": why,
         "Job Title": r["title"], "Possible Job Title": r["title"], "Employer": r["employer"],
         "Possible Employer": r["employer"], "Field": lab["field"], "Job Type": lab["job_type"],
         "Seniority": seniority(r, lab), "Location": location_text(r), "State": r["state"], "Initiated": r["init_year"],
@@ -521,7 +550,7 @@ def people_table(ws, name, people, columns, color, top=1):
                 if r["linkedin"]:
                     # The full address, not "LinkedIn profile": phone previews that can't follow
                     # spreadsheet links can still long-press, copy or auto-link a visible address.
-                    link(cell, r["linkedin"], urllib.parse.unquote(r["linkedin"].replace("https://", "")))
+                    link(cell, r["linkedin"], "linkedin.com/in/" + linkedin_username(r["linkedin"]))
                 else:
                     q = urllib.parse.quote_plus(f"{r['first']} {r['last']} University of Florida")
                     link(cell, f"https://www.linkedin.com/search/results/people/?keywords={q}", "Search LinkedIn")
@@ -531,10 +560,10 @@ def people_table(ws, name, people, columns, color, top=1):
                     cell.number_format = "0"
                 if h == "Info As Of" and isinstance(cell.value, dt.date):
                     cell.number_format = "mmm yyyy"
-                if h == "Score":
+                if h == "Score (1-10)":
                     cell.font = font(bold=(cell.value or 0) >= 8)
             cell.alignment = Alignment(vertical="top", wrap_text=h in WRAP,
-                                       horizontal="center" if h == "Score" else "left")
+                                       horizontal="center" if h == "Score (1-10)" else "left")
     t = Table(displayName=name, ref=f"A{top}:{get_column_letter(len(columns))}{top + max(len(people), 1)}")
     t.tableStyleInfo = TableStyleInfo(name="TableStyleLight1", showRowStripes=True)
     ws.add_table(t)
@@ -542,24 +571,39 @@ def people_table(ws, name, people, columns, color, top=1):
     print_setup(ws, pages_wide=2, title_rows=f"{top}:{top}")
 
 
-def dropdowns(ws, columns, rows=2000):
+def dropdowns(ws, columns, first=2, rows=2000):
     for h, ref in (("Field", f"Lists!$A$2:$A${len(FIELDS) + 1}"), ("Job Type", f"Lists!$B$2:$B${len(TYPES) + 1}")):
         col = get_column_letter(columns.index(h) + 1)
         dv = DataValidation(type="list", formula1=ref, allow_blank=True, showErrorMessage=True, errorStyle="warning",
                             errorTitle=h, error=f"Pick a {h} from the list.")
-        dv.add(f"{col}2:{col}{rows}")
+        dv.add(f"{col}{first}:{col}{rows}")
         ws.add_data_validation(dv)
 
 
-def text_rows(ws, lines, width=62):
+def title_rows(ws, title):
+    """Row 1: a short title; row 2: a link back to Find Your Field (the table starts on row 3)."""
+    ws["A1"] = title
+    ws["A1"].font = font(size=14, bold=True, color=RED)
+    link(ws["A2"], "'Find Your Field'!A1", "Back to Find Your Field", internal=True)
+    ws.row_dimensions[2].height = 24
+    ws["A2"].alignment = Alignment(vertical="center")
+
+
+def text_rows(ws, lines, width=45):
     """A one-column page of headings and short paragraphs (narrow, so it fits a phone screen)."""
     ws.column_dimensions["A"].width = width
     styles = {"title": font(size=18, bold=True, color=RED), "head": font(size=13, bold=True, color=RED),
               "text": font(size=12)}
-    for i, (kind, text) in enumerate(lines, 1):
-        c = ws.cell(row=i, column=1, value=text)
-        c.font = styles[kind]
-        c.alignment = Alignment(wrap_text=True, vertical="top")
+    for i, (kind, text, *target) in enumerate(lines, 1):
+        c = ws.cell(row=i, column=1)
+        if kind == "link":  # a tappable jump to another tab
+            link(c, target[0], text, internal=True)
+            c.font = font(size=13, bold=True, color=LINK, underline="single")
+            ws.row_dimensions[i].height = 26
+        else:
+            c.value = text
+            c.font = styles[kind]
+        c.alignment = Alignment(wrap_text=True, vertical="center" if kind == "link" else "top")
     ws.sheet_view.showGridLines = False
 
 
@@ -567,7 +611,11 @@ def build_workbook(recs, out):
     global by_row, scores
     by_row, scores = load_labels(), load_scores()
     main = [r for r in recs if r["tier"] == "main"]
-    review = sorted([r for r in recs if r["tier"] == "review"], key=best_first)
+    def likelihood(r):  # check the people most likely to be him first
+        why = r.get("why", "")
+        order = ["It's him", "Name matches", "Research team", "No current job", "different person", "family member"]
+        return next((i for i, k in enumerate(order) if k in why), 2)
+    review = sorted([r for r in recs if r["tier"] == "review"], key=lambda r: (likelihood(r), best_first(r)))
     by_field = collections.defaultdict(list)
     for r in main:
         by_field[labels_for(r)["field"] or "Other / Unknown"].append(r)
@@ -585,7 +633,7 @@ def build_workbook(recs, out):
     # ------------------------------------------------------------ Find Your Field
     ff = wb.create_sheet("Find Your Field")
     ff.sheet_properties.tabColor = RED
-    for c, (h, w) in enumerate((("Field (tap to see everyone)", 40), ("Alumni", 10), ("Top Score", 11)), 1):
+    for c, (h, w) in enumerate((("Field (tap one)", 30), ("Alumni", 8), ("Top Score", 8)), 1):
         cell = ff.cell(row=1, column=c, value=h)
         cell.font = font(bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor=RED)
@@ -594,34 +642,46 @@ def build_workbook(recs, out):
     ff.row_dimensions[1].height = 32
     for i, f in enumerate(fields, 2):
         tab = TAB.get(f, f)
-        link(ff.cell(row=i, column=1), f"'{tab}'!A1", f, internal=True)
-        ff.cell(row=i, column=2, value=len(by_field[f])).font = font()
-        ff.cell(row=i, column=3, value=max((score(r)[0] or 0) for r in by_field[f]) or None).font = font()
+        cell = ff.cell(row=i, column=1)
+        link(cell, f"'{tab}'!A1", f, internal=True)
+        cell.font = font(size=12, color=LINK, underline="single")
+        cell.alignment = Alignment(vertical="center", wrap_text=True)
+        ff.cell(row=i, column=2, value=len(by_field[f])).font = font(size=12)
+        ff.cell(row=i, column=3, value=max((score(r)[0] or 0) for r in by_field[f]) or None).font = font(size=12)
         for c in (2, 3):
-            ff.cell(row=i, column=c).alignment = Alignment(horizontal="center")
+            ff.cell(row=i, column=c).alignment = Alignment(horizontal="center", vertical="center")
+        ff.row_dimensions[i].height = 30  # a comfortable tap target
     t = Table(displayName="FindYourField", ref=f"A1:C{len(fields) + 1}")
     t.tableStyleInfo = TableStyleInfo(name="TableStyleLight1", showRowStripes=True)
     ff.add_table(t)
     ff.freeze_panes = "A2"
-    ff.cell(row=len(fields) + 3, column=1,
-            value=f"Counts as of {month}. Each field's tab lists everyone in it, highest Score first.").font = \
-        font(italic=True)
+    note = ff.cell(row=len(fields) + 3, column=1,
+                   value=f"Counts as of {month}. Each field's tab lists everyone in it, highest score first.")
+    note.font, note.alignment = font(italic=True), Alignment(wrap_text=True)
+    for k, (text, target) in enumerate((("Top Picks: everyone scoring 8+", "'Top Picks'!A1"),
+                                        ("Back to Start Here", "'Start Here'!A1")), len(fields) + 5):
+        link(ff.cell(row=k, column=1), target, text, internal=True)
+        ff.cell(row=k, column=1).font = font(size=12, color=LINK, underline="single")
+        ff.row_dimensions[k].height = 26
     print_setup(ff, landscape=False)
 
     # ------------------------------------------------------------ Top Picks, All Alumni, Needs Review
     tp = wb.create_sheet("Top Picks")
     tp.sheet_properties.tabColor = RED
-    people_table(tp, "TopPicks", top_picks, PEOPLE[:4] + ["Field"] + PEOPLE[4:], RED)
+    title_rows(tp, f"Top Picks: {len(top_picks)} alumni scoring 8+")
+    people_table(tp, "TopPicks", top_picks, PEOPLE[:4] + ["Field"] + PEOPLE[4:], RED, top=3)
 
     al = wb.create_sheet("All Alumni")
     al.sheet_properties.tabColor = RED
-    people_table(al, "AllAlumni", all_sorted, ALL, RED)
-    dropdowns(al, ALL)
+    title_rows(al, f"All Alumni: {len(main)}, by field")
+    people_table(al, "AllAlumni", all_sorted, ALL, RED, top=3)
+    dropdowns(al, ALL, first=4)
 
     rv = wb.create_sheet("Needs Review")
     rv.sheet_properties.tabColor = AMBER
-    people_table(rv, "NeedsReview", review, REVIEW, AMBER)
-    dropdowns(rv, REVIEW)
+    title_rows(rv, f"Needs Review: {len(review)} unconfirmed. Don't contact anyone here yet.")
+    people_table(rv, "NeedsReview", review, REVIEW, AMBER, top=3)
+    dropdowns(rv, REVIEW, first=4)
     dcol = get_column_letter(REVIEW.index("Decision (fill in)") + 1)
     ncol = get_column_letter(REVIEW.index("Reviewer Notes (fill in)") + 1)
     dv = DataValidation(type="list", formula1='"Correct,Wrong person,Unsure"', allow_blank=True,
@@ -629,13 +689,13 @@ def build_workbook(recs, out):
                         prompt="After checking LinkedIn, choose Correct, Wrong person or Unsure.",
                         showErrorMessage=True, errorStyle="warning", errorTitle="Decision",
                         error="Please choose Correct, Wrong person or Unsure.")
-    dv.add(f"{dcol}2:{dcol}2000")
+    dv.add(f"{dcol}4:{dcol}2000")
     rv.add_data_validation(dv)
     edge = Side(style="medium", color=AMBER)
-    for row in range(1, len(review) + 202):
+    for row in range(3, len(review) + 204):
         for col in (dcol, ncol):
             cell = rv[f"{col}{row}"]
-            if row > 1:
+            if row > 3:
                 cell.fill = PatternFill("solid", fgColor=FILL_IN)
             cell.border = Border(left=edge if col == dcol else cell.border.left,
                                  right=edge if col == ncol else cell.border.right, bottom=cell.border.bottom)
@@ -644,9 +704,7 @@ def build_workbook(recs, out):
     for n, f in enumerate(fields, 1):
         ws = wb.create_sheet(TAB.get(f, f))
         people = sorted(by_field[f], key=best_first)
-        ws["A1"] = f"{f}: {len(people)} alumni, highest Score first"
-        ws["A1"].font = font(size=14, bold=True, color=RED)
-        link(ws["A2"], "'Find Your Field'!A1", "Back to Find Your Field", internal=True)
+        title_rows(ws, f"{TAB.get(f, f)}: {len(people)} alumni")
         people_table(ws, f"Field{n}", people, PEOPLE, RED, top=3)
 
     # ------------------------------------------------------------ dropdown lists (hidden)
@@ -670,23 +728,29 @@ def build_workbook(recs, out):
                  "lists or group texts. Use it for one-to-one career networking only: no sales pitches, "
                  "fundraising or mass emails."),
         ("head", "How to use it"),
-        ("text", "1. Open the Find Your Field tab and tap your field. You'll see everyone in it, highest Score first."),
-        ("text", "2. Start with the highest scores. Score (1 to 10) is how useful the contact is likely to be for "
-                 "internships, jobs and advice: how senior he is, whether the job needs a degree, how established "
-                 "the employer is, and how well it fits what brothers study. 'Why This Score' explains it."),
-        ("text", "3. Look him up on LinkedIn first: tap the LinkedIn link, or type his LinkedIn Username into the "
-                 "LinkedIn app's search. Then email him or message him on LinkedIn."),
-        ("text", "Top Picks lists everyone scoring 8 or more. All Alumni lists everyone, with a Field column you "
-                 "can filter."),
+        ("text", "1. Tap your field on Find Your Field. You'll see everyone in it, highest score first."),
+        ("link", "Go to Find Your Field", "'Find Your Field'!A1"),
+        ("text", "2. Start at the top. Score (1-10) is how useful he's likely to be for internships, jobs and "
+                 "advice: how senior he is, whether the job needs a degree, how established the employer is, and "
+                 "how well it fits what brothers study. Scores of 8 and up are in bold; 'Why This Score' explains "
+                 "each one."),
+        ("text", "3. Check his LinkedIn first: tap the LinkedIn link. If it won't open, type linkedin.com/in/ and "
+                 "then his LinkedIn Username into Safari. Then email him or message him on LinkedIn."),
+        ("link", "Top Picks: everyone scoring 8+", "'Top Picks'!A1"),
+        ("text", "All Alumni lists everyone, with a Field column you can filter."),
         ("head", "On an iPhone"),
         ("text", "Open the file in the free Excel app (or Google Sheets): tap the file, tap Share, then choose "
                  "Excel. A quick preview (from a text, an email or the Files app) can't tap links; there, "
                  "press and hold an address to open or copy it."),
+        ("text", "In Google Sheets, if tapping a field doesn't jump to it, pick the field's tab from the list at "
+                 "the bottom."),
         ("text", "Switch tabs with the tab bar at the bottom of the screen, or tap 'Back to Find Your Field' at "
                  "the top of each field's tab. Names stay on screen as you scroll right."),
         ("text", "To sort or filter in the Excel app, tap a column heading, then the filter button."),
         ("head", "What the columns mean"),
         ("text", "Job Type: what he does (e.g. Legal, Engineering, Sales). Field: his employer's industry."),
+        ("text", "LinkedIn Username: the end of his profile address (linkedin.com/in/username), for when the "
+                 "link won't open."),
         ("text", "Notes: read before reaching out. It says if the job may have changed or newer data shows a "
                  "different employer."),
         ("text", "Location: where he works or lives now. Initiated: the year he was initiated, to help you "
