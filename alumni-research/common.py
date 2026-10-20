@@ -29,6 +29,9 @@ GENERIC_EMAIL_DOMAINS = {
     "protonmail.com", "ymail.com", "rocketmail.com", "juno.com", "mindspring.com",
     "embarqmail.com", "tampabay.rr.com", "cfl.rr.com", "rr.com", "q.com", "windstream.net",
     "frontier.com", "optonline.net", "netzero.net", "gmx.com", "mail.com", "duck.com",
+    # older internet providers seen on the roster (not employers)
+    "netzero.com", "peoplepc.com", "swbell.net", "usa.net", "netscape.net", "seanet.com",
+    "srv.net", "vbnet.net", "hiwaay.net", "googlemail.com", "ibm.net", "woh.rr.com", "nycap.rr.com",
 }
 
 # Common nickname <-> legal-name pairs. Used only to decide whether the first

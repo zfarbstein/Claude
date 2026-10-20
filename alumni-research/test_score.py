@@ -116,17 +116,38 @@ class Rules(unittest.TestCase):
         self.assertEqual(status(c), "NEEDS REVIEW")
 
     def test_provider_email_match_needs_one_more_fact(self):
-        m = anchor("name: Jon Sample", by="email", likelihood=9)
+        m = anchor("matched on: email", by="email", likelihood=9, matched=["email"])
         self.assertEqual(status(cand(lookup_match=m)), "NEEDS REVIEW")
         self.assertEqual(status(cand(lookup_match=m, uf_education=anchor("UF"))), "VERIFIED")
 
-    def test_provider_low_likelihood_does_not_count(self):
-        m = anchor("name: Jon Sample", by="email", likelihood=6)
+    def test_provider_email_match_at_4_counts(self):
+        m = anchor("matched on: email", by="email", likelihood=4, matched=["email"])
+        self.assertEqual(status(cand(lookup_match=m, uf_education=anchor("UF"))), "VERIFIED")
+
+    def test_provider_email_below_4_does_not_count(self):
+        m = anchor("matched on: email", by="email", likelihood=3, matched=["email"])
+        self.assertEqual(status(cand(lookup_match=m, uf_education=anchor("UF"))), "NEEDS REVIEW")
+
+    def test_provider_phone_needs_7(self):
+        low = anchor("matched on: phone", by="phone", likelihood=4, matched=["phone"])
+        self.assertEqual(status(cand(lookup_match=low, uf_education=anchor("UF"))), "NEEDS REVIEW")
+        ok = anchor("matched on: phone", by="phone", likelihood=7, matched=["phone"])
+        self.assertEqual(status(cand(lookup_match=ok, uf_education=anchor("UF"))), "VERIFIED")
+
+    def test_provider_must_report_matching_on_that_input(self):
+        m = anchor("matched on: name", by="email", likelihood=9, matched=["name"])
+        self.assertEqual(status(cand(lookup_match=m, uf_education=anchor("UF"))), "NEEDS REVIEW")
+        m = anchor("matched on: ", by="email", likelihood=9)
         self.assertEqual(status(cand(lookup_match=m, uf_education=anchor("UF"))), "NEEDS REVIEW")
 
     def test_provider_name_lookup_is_not_a_lookup_match(self):
-        m = anchor("name: Jon Sample", by="name", likelihood=10)
+        m = anchor("matched on: name", by="name", likelihood=10, matched=["name"])
         self.assertEqual(status(cand(lookup_match=m, uf_education=anchor("UF"))), "NEEDS REVIEW")
+
+    def test_provider_match_with_wrong_last_name_fails(self):
+        m = anchor("matched on: phone", by="phone", likelihood=9, matched=["phone"])
+        c = cand(name="Jon Other", lookup_match=m, uf_education=anchor("UF"))
+        self.assertEqual(status(c), "NEEDS REVIEW")
 
     def test_nothing_found(self):
         self.assertEqual(status(), "NOT FOUND")

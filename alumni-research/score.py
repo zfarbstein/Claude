@@ -12,9 +12,10 @@ A candidate is VERIFIED only when ALL of these hold:
   2. It has an identity proof:
        a. the roster email or phone number appears on the source, or the
           person is named on the website of their roster work-email domain, OR
-       a2. a data provider (People Data Labs) matched the roster email or
-          phone with high confidence AND one more fact fits (UF, city,
-          grad year or birth year), OR
+       a2. a data provider (People Data Labs) matched the roster email
+          (likelihood 4+) or phone (7+), reports that it matched on that
+          input, AND one more fact fits (UF, city, grad year or birth
+          year), OR
        b. UF attendance is shown AND Delta Chi membership is shown, OR
        c. UF attendance is shown AND at least two of: lives/lived in the
           roster city, UF graduation year fits the initiation year, birth
@@ -36,6 +37,9 @@ from urllib.parse import urlparse
 
 from common import EVIDENCE, OUTPUT, QUEUE, name_matches, same_city
 from fetch import quote_on_page
+
+
+LOOKUP_MIN = {"email": 4, "phone": 7}
 
 
 def has(anchor):
@@ -116,8 +120,11 @@ def assess(person, cand):
     supporting = sum([loc, bool(grad), bool(birth)])
     # A data-provider record found by looking up the roster email/phone. The
     # provider can merge profiles wrongly, so it also needs one fact that fits.
-    lookup = (has(a.get("lookup_match")) and a["lookup_match"].get("by") in ("email", "phone")
-              and (a["lookup_match"].get("likelihood") or 0) >= 8 and (uf or supporting >= 1))
+    # PDL scores a correct email-only match 4-6; a recycled phone number
+    # scored 4, so phone needs 7.
+    lm = a.get("lookup_match") or {}
+    lookup = (has(lm) and lm.get("by") in LOOKUP_MIN and lm["by"] in (lm.get("matched") or [])
+              and (lm.get("likelihood") or 0) >= LOOKUP_MIN[lm["by"]] and (uf or supporting >= 1))
     if lookup:
         reasons.append(f"data provider matched the roster {a['lookup_match']['by']}")
     identity = email or phone or domain or lookup or (uf and dchi) or (uf and supporting >= 2)

@@ -19,7 +19,7 @@ coverage: a wrong employer sends someone to the wrong person.
 | Full-run queue | 1,552 people; 50 already have evidence from the test, so **1,502 left** |
 | Free-plan test (100 people) | 0 verified, 50 needs review, 50 not found |
 | Test leads vs the team's answers | 19 agree, 2 disagree (both look like recent job changes), 6 no employer |
-| PDL credits this month | 64 of 100 free used (51 test + 13 Phase 0) |
+| PDL credits this month | 100 of 100 free used (51 test, 13 Phase 0, 36 Phase 0b) |
 | Known setup bug | Environment variable is named `DL_API_KEY`; scripts read `PDL_API_KEY` |
 
 Why nothing verified: on the free plan all 50 matches came from name lookups
@@ -99,24 +99,31 @@ roster rows: 181 "Unable to Find", 51 "Unable to Verify", 113 "Unc", 19
 "Partial". These are in the queue because they aren't "Complete". Expect lower
 match rates there. (Ask the team what "Unc" means.)
 
-## 3. Budget
+## 3. Budget (revised after Phase 0b)
+
+The fixed settings match more people (0.84 credits per person with an email,
+vs. 0.5 before), so the run costs more but verifies far more. Of the 1,502
+left, 645 have an email, about 430 more have only a phone, and about 430 have
+neither (name-only; these need Pro's location data to verify).
 
 | Step | People | Credits (est.) |
 |---|---|---|
-| Re-run the 100-person test on Pro | 100 | 50–60 |
-| Ages 40–64 | 579 | 290–350 |
-| Ages 23–39 | 301 | 140–180 |
-| Ages 65+ | 516 | 230–300 |
+| Ages 40–64 | 579 | 400–490 |
+| Ages 23–39 | 301 | 200–250 |
+| Ages 65+ | 516 | 330–430 |
 | Under 23 and unknown age | 106 | skip (mostly students) |
-| **Total** | | **~710–890** |
+| **Total** | | **~930–1,170 (~$260–330)** |
 
-`required` job fields will lower the 65+ number somewhat. Month 1 ($98, 350
-credits): test + most of 40–64. Month 2: buy exactly what's left (the script
-reports remaining people), likely 350–550 credits ($98–154).
+No separate Pro re-test is needed: Phase 0b measured the email/phone path.
+Spot-check a few name-only matches on Pro for location data instead.
+`--required "job_title AND job_company_name"` lowers the count (people without
+a listed job aren't charged); use it for 65+ at least.
+Month 1 ($98, 350 credits): ages 40–64 with email or phone first. Month 2 on:
+buy what's left; the ledger shows usage.
 
-Expected outcome, people searched: verified ~25–35%, needs review ~25–30%
-(of which ~85–90% are right), not found ~40%. Replace these with measured
-numbers after Phase 3.
+Expected outcome, people searched: verified ~35–45% (47% among people with an
+email; lower for phone-only and name-only), needs review ~30%, not found
+~25–30%.
 
 ## 4. Phases
 
@@ -149,6 +156,33 @@ Consequences, folded into Phase 1:
 - The free plan can verify people by email. Pro is still worth it for speed
   (100 vs. ~1,000+ matches a month) and for location, which name-only matches
   need as their second fact.
+
+### Phase 0b: free re-run with the fixes (done 2026-10-20)
+Code changes from Phase 1 items 1–3 are in (per-input minimums,
+`include_if_matched`, name variants, `--ages`, `--required`, response cache,
+credit ledger, ISP domains, scoring rule + tests). Re-ran the 53 test people
+who have a roster email, with the last 36 free credits (Phase 0's 7 email
+matches came from the cache at no cost). 51 got through before credits ran
+out. Free-plan evidence from the first test is kept in `data/evidence_free_v1/`.
+
+| | Free test, old settings (100) | Re-run, people with email (51) |
+|---|---|---|
+| Verified | 0 | **24 (47%)** |
+| Needs review | 50 | 19 |
+| Not found | 50 | 8 |
+| Matches by email / phone / name | 0 / 0 / 50 | 29 / 11 / 3 |
+| Credits per person | 0.5 | 0.84 |
+
+- All 24 verified came from an email (18) or phone (6) match plus UF.
+- Of the 18 verified people the team had researched, **none is a different
+  person**. 14 have the team's employer. 4 differ on the job only: 2 where
+  PDL's job is newer (records checked Aug–Sep 2026; one started Feb 2026), 1
+  where PDL shows an old job with no start date, 1 with a junk job field
+  (a school name as the title, data from 2022).
+- Lesson: VERIFIED proves identity, not that the job is current. `export.py`
+  must flag a job with no start date or data older than 2 years (section 5.2),
+  and team review should look at those first.
+- 0 free credits left this month (ledger: 100).
 
 ### Phase 1: code changes, before subscribing (no credits)
 1. `enrich_pdl.py`
@@ -185,17 +219,14 @@ Consequences, folded into Phase 1:
 User buys Pro at 350 credits/month and renames the environment variable to
 `PDL_API_KEY`, then starts a new session. No action until both are done.
 
-### Phase 3: Pro re-test (go/no-go)
-1. Check the key works and the plan is Pro (one lookup on a test person; the
-   response should include a location).
-2. Move the 100 test evidence files aside (`data/evidence_free/`); re-run the
-   pilot queue.
-3. `score.py`, `evaluate.py`. Record: verified count, agreement with the team,
-   email/phone match counts, credits used.
-4. **Go** if: verified ≥ 25 of 100 **and** no VERIFIED result disagrees with
-   the team for a reason other than a dated job change. Otherwise stop, report,
-   and propose rule or input changes before spending more.
-5. Report to the user before Phase 4.
+### Phase 3: Pro check (small)
+Phase 0b already passed the go/no-go (24 of 51 verified, no wrong person).
+1. Check the key works and the plan is Pro: one lookup on a test person; the
+   response should include a location and contact fields.
+2. Re-run the ~50 test people without an email (their old evidence is in
+   `data/evidence_free_v1/`) to measure the phone-only and name-only paths
+   with location data. ~40 credits.
+3. Report to the user before Phase 4.
 
 ### Phase 4: main run
 1. `prepare.py todo`; run enrichment in age order 40–64, 23–39, 65+; skip under

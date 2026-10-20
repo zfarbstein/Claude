@@ -1,18 +1,27 @@
 """Look people up in People Data Labs and turn each match into evidence.
 
-    PDL_API_KEY=... python3 enrich_pdl.py [--max-matches 100] [--dry-run]
+    PDL_API_KEY=... python3 enrich_pdl.py [--max-matches 100] [--ages 40-64,23-39] [--dry-run]
 
 For each person in data/queue.jsonl without an evidence file:
   1. look up by roster email (strongest: the match is tied to that address),
   2. else by roster phone,
-  3. else by name + "University of Florida" + roster city/state.
+  3. else by name + "University of Florida", trying the informal and legal
+     first name with the roster city, the roster state, and no location.
 PDL only charges for matches. --max-matches stops before the plan runs out.
+
+PDL scores a correct email-only match 4-6 out of 10, so each kind of lookup
+has its own minimum (MIN_LIKELIHOOD). A wrong phone match (recycled number)
+scored 4, so phone needs 7. Responses are cached in data/pdl_cache/ so the
+same query is never paid for twice, and every paid match is logged in
+data/pdl_ledger.jsonl.
 
 PDL is a database, not a web page, so each response is saved as plain text
 under a "pdl:" pseudo-URL in data/pages/. Evidence quotes are lines of that
 text, and score.py checks them against it like any other page.
 """
 import argparse
+import datetime as dt
+import hashlib
 import json
 import os
 import sys
@@ -21,15 +30,42 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from common import EVIDENCE, QUEUE
+from common import DATA, EVIDENCE, QUEUE
 from fetch import PAGES, page_path
 
 API = "https://api.peopledatalabs.com/v5/person/enrich"
-MIN_LIKELIHOOD = 8  # PDL's 1-10 confidence; 8+ is its "high confidence" band
+# PDL's 1-10 confidence, per kind of lookup (see the docstring).
+MIN_LIKELIHOOD = {"email": 4, "phone": 7, "name": 8}
+CACHE = DATA / "pdl_cache"
+LEDGER = DATA / "pdl_ledger.jsonl"
 
 
-def lookup(key, params, tries=6):
-    q = urllib.parse.urlencode({**params, "min_likelihood": MIN_LIKELIHOOD, "titlecase": "true"})
+def cache_path(params):
+    return CACHE / (hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest()[:16] + ".json")
+
+
+def cached_lookup(key, by, params, required=None):
+    """Return the response (or None for no match) and whether it cost a credit.
+
+    A cached 404 asked at a lower minimum is also a 404 at a higher one, and a
+    cached match below the current minimum counts as no match."""
+    min_l = MIN_LIKELIHOOD[by]
+    query = {**params, **({"required": required} if required else {})}
+    path = cache_path(query)
+    if path.exists():
+        c = json.load(open(path))
+        if c["min_likelihood"] <= min_l:
+            resp = c["response"]
+            return (resp if resp and (resp.get("likelihood") or 0) >= min_l else None), False
+    resp = lookup(key, query, min_l)
+    CACHE.mkdir(parents=True, exist_ok=True)
+    json.dump({"min_likelihood": min_l, "response": resp}, open(path, "w"))
+    return resp, resp is not None
+
+
+def lookup(key, params, min_likelihood, tries=6):
+    q = urllib.parse.urlencode({**params, "min_likelihood": min_likelihood, "titlecase": "true",
+                                "include_if_matched": "true"})
     req = urllib.request.Request(f"{API}?{q}", headers={"X-Api-Key": key, "Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
@@ -39,7 +75,7 @@ def lookup(key, params, tries=6):
             return None  # no match, not charged
         if e.code == 429 and tries > 1:  # free plan allows only a few calls a minute
             time.sleep(int(e.headers.get("Retry-After") or 60))
-            return lookup(key, params, tries - 1)
+            return lookup(key, params, min_likelihood, tries - 1)
         body = e.read().decode(errors="replace")[:300]
         raise SystemExit(f"PDL error {e.code}: {body}")
 
@@ -85,16 +121,19 @@ def unmask(v):
 def evidence_from(person, resp, by):
     d = unmask(resp["data"])
     url = f"pdl:{person['row']}:{by}"
+    matched = resp.get("matched") or []
+    matched_line = "matched on: " + ", ".join(matched)
     lines = page_lines(d)
     PAGES.mkdir(parents=True, exist_ok=True)
-    page_path(url).write_text(f"URL: {url}\nlikelihood: {resp.get('likelihood')}\n\n" + "\n".join(lines))
+    page_path(url).write_text(f"URL: {url}\nlikelihood: {resp.get('likelihood')}\n{matched_line}\n\n"
+                              + "\n".join(lines))
 
     def anchor(line, **extra):
         return {"url": url, "quote": line, "fetched": True, **extra}
 
     anchors = {"locations": []}
     if by in ("email", "phone"):
-        anchors["lookup_match"] = anchor(lines[0], by=by, likelihood=resp.get("likelihood"))
+        anchors["lookup_match"] = anchor(matched_line, by=by, likelihood=resp.get("likelihood"), matched=matched)
     for line, e in zip([l for l in lines if l.startswith("education: ")], d.get("education") or []):
         school = ((e.get("school") or {}).get("name") or "").lower()
         if "university of florida" in school and "central" not in school and "south" not in school \
@@ -146,25 +185,49 @@ def queries(p):
         yield "email", {"email": p["email"]}
     if p["phone"] and len(p["phone"]) == 10:
         yield "phone", {"phone": "+1" + p["phone"]}
-    params = {"first_name": p["informal"] or p["first"], "last_name": p["last"], "school": "University of Florida"}
-    if p["city"]:
-        params["location"] = f"{p['city']}, {p['state']}"
-    yield "name", params
+    # Name + UF is what reaches likelihood 8; name + location alone rarely
+    # scores above 4. Roster addresses can be old, so also try without the city.
+    firsts = list(dict.fromkeys(n for n in (p["informal"], p["first"]) if n))
+    places = [f"{p['city']}, {p['state']}" if p["city"] else None, p["state"] or None, None]
+    for place in dict.fromkeys(places):
+        for first in firsts:
+            params = {"first_name": first, "last_name": p["last"], "school": "University of Florida"}
+            if place:
+                params["location"] = place
+            yield "name", params
+
+
+def age_band(age):
+    if age is None:
+        return "unknown"
+    return "<23" if age < 23 else "23-39" if age < 40 else "40-64" if age < 65 else "65+"
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-matches", type=int, default=100)
+    ap.add_argument("--ages", help="age bands to run, in order, e.g. 40-64,23-39,65+ (also: <23, unknown)")
+    ap.add_argument("--required", help='PDL "required" fields, e.g. "job_title AND job_company_name"')
     ap.add_argument("--dry-run", action="store_true", help="show the lookups without calling PDL")
     args = ap.parse_args()
-    key = os.environ.get("PDL_API_KEY")
+    # The environment setting was first saved as DL_API_KEY; accept both.
+    key = os.environ.get("PDL_API_KEY") or os.environ.get("DL_API_KEY")
     if not key and not args.dry_run:
         raise SystemExit("PDL_API_KEY is not set (add it in the environment settings, then start a new session)")
 
+    people = [json.loads(line) for line in open(QUEUE)]
+    if args.ages:
+        bands = args.ages.split(",")
+        people = sorted((p for p in people if age_band(p["age"]) in bands),
+                        key=lambda p: bands.index(age_band(p["age"])))
+
     EVIDENCE.mkdir(parents=True, exist_ok=True)
+    month = dt.date.today().strftime("%Y-%m")
+    if LEDGER.exists():
+        used = sum(1 for e in map(json.loads, open(LEDGER)) if e["date"].startswith(month))
+        print(f"{used} PDL matches already logged this month")
     matches = 0
-    for line in open(QUEUE):
-        p = json.loads(line)
+    for p in people:
         out = EVIDENCE / f"{p['row']}.json"
         if out.exists():
             continue
@@ -176,9 +239,12 @@ def main():
             searched.append(f"PDL enrich by {by}")
             if args.dry_run:
                 continue
-            resp = lookup(key, params)
-            if resp:
+            resp, charged = cached_lookup(key, by, params, args.required)
+            if charged:
                 matches += 1
+                with open(LEDGER, "a") as f:
+                    f.write(json.dumps({"date": dt.date.today().isoformat(), "row": p["row"], "by": by}) + "\n")
+            if resp:
                 candidate = evidence_from(p, resp, by)
                 break
         if args.dry_run:
