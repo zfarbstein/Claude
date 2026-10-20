@@ -45,6 +45,8 @@ def person(rownum, r):
 
 
 def skip_reason(p, r):
+    if r["Member Status"].strip() != "Alumnus":
+        return "not an alumnus"
     if p["age"] is not None and p["age"] > MAX_AGE:
         return f"over {MAX_AGE}"
     if r["Research Status"].strip().lower() in DONE_STATUSES:

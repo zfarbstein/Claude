@@ -99,7 +99,28 @@ roster rows: 181 "Unable to Find", 51 "Unable to Verify", 113 "Unc", 19
 "Partial". These are in the queue because they aren't "Complete". Expect lower
 match rates there. (Ask the team what "Unc" means.)
 
-## 3. Budget (revised after Phase 0b)
+## 3. Scope and budget
+
+**Scope (decided by the user, 2026-10-20):**
+- Only **Alumnus** member status (`prepare.py` skips the 99 others).
+- Only people **with a current job listed**: every lookup sends
+  `required=job_title AND job_company_name` (the default), so PDL neither
+  returns nor charges for anyone without one.
+- **Under 60 first** (`--max-age 59`), then 60+.
+
+| Run | Alumni left | Email / phone only / neither | Credits (est.) | Cost |
+|---|---|---|---|---|
+| 1. Under 60 | 718 (+ ~19 test people to redo) | 328 / 141 / 249 | ~300 | first $98 month |
+| 2. 60 and over | 671 | 217 / 281 / 173 | ~220 | second $98 month |
+| Unknown age | 14 | | small | with run 2 |
+
+Credits assume about 45% / 30% / 40% of email / phone-only / name-only people
+match with a job listed (fewer in the older group). Expected from run 1:
+~165 verified and ~110 needs-review leads with a job (~80 of those confirmed
+by the team), so ~245 contactable alumni for ~$98. Run 2 adds roughly ~150.
+Two $98 months (700 credits) should cover both runs with room to spare.
+
+### Earlier estimate (all 1,502, before the scope decisions)
 
 The fixed settings match more people (0.84 credits per person with an email,
 vs. 0.5 before), so the run costs more but verifies far more. Of the 1,502
@@ -179,7 +200,7 @@ Consequences, folded into Phase 1:
 
 ### Phase 0b: free re-run with the fixes (done 2026-10-20)
 Code changes from Phase 1 items 1–3 are in (per-input minimums,
-`include_if_matched`, name variants, `--ages`, `--required`, response cache,
+`include_if_matched`, name variants, age limits, `--required`, response cache,
 credit ledger, ISP domains, scoring rule + tests). Re-ran the 53 test people
 who have a roster email, with the last 36 free credits (Phase 0's 7 email
 matches came from the cache at no cost). 51 got through before credits ran
@@ -215,7 +236,7 @@ out. Free-plan evidence from the first test is kept in `data/evidence_free_v1/`.
    - `include_if_matched=true`; store the matched inputs in evidence and the
      saved page text, so `score.py` can use "email matched" as proof.
    - Per-input thresholds from Phase 0: email 4, phone 7, name 8.
-   - `--ages 40-64,23-39,65+` to order and filter the queue.
+   - `--max-age` / `--min-age` to run under 60 first.
    - `--budget N` that counts matches across runs (read existing evidence), so
      a resumed run can't overspend.
    - Read `PDL_API_KEY`, falling back to `DL_API_KEY`, until the setting is
@@ -249,8 +270,9 @@ Phase 0b already passed the go/no-go (24 of 51 verified, no wrong person).
 3. Report to the user before Phase 4.
 
 ### Phase 4: main run
-1. `prepare.py todo`; run enrichment in age order 40–64, 23–39, 65+; skip under
-   23 and unknown age.
+1. `prepare.py todo` (alumni only); `enrich_pdl.py --max-age 59 --max-matches
+   <credits left>`; then, next month, `--min-age 60`, then the unknown-age
+   people with neither flag. The job-required filter is on by default.
 2. Stop at the month's remaining credits. Report: people done, left, credits
    used, verified so far.
 3. Next month: buy only what's needed, resume (the script skips people with
@@ -370,7 +392,6 @@ columns with `AI Status = SELF-REPORTED` and are eligible for 5.3.
 
 ## 8. Decisions waiting on the user
 - Send date of birth to PDL as a lookup input? (default no)
-- Include ages 65+ in the paid run, or leave them to the survey?
 - Allow filling the team's columns (5.3) at all, or AI columns only?
 - Who sends the survey, and from what address?
 - What does Research Status "Unc" mean?

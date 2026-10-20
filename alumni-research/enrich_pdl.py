@@ -1,6 +1,6 @@
 """Look people up in People Data Labs and turn each match into evidence.
 
-    PDL_API_KEY=... python3 enrich_pdl.py [--max-matches 100] [--ages 40-64,23-39] [--dry-run]
+    PDL_API_KEY=... python3 enrich_pdl.py [--max-matches 100] [--max-age 59] [--dry-run]
 
 For each person in data/queue.jsonl without an evidence file:
   1. look up by roster email (strongest: the match is tied to that address),
@@ -8,6 +8,8 @@ For each person in data/queue.jsonl without an evidence file:
   3. else by name + "University of Florida", trying the informal and legal
      first name with the roster city, the roster state, and no location.
 PDL only charges for matches. --max-matches stops before the plan runs out.
+This is for members contacting alumni about jobs, so by default PDL only
+returns (and charges for) people with a current job title and employer.
 
 PDL scores a correct email-only match 4-6 out of 10, so each kind of lookup
 has its own minimum (MIN_LIKELIHOOD). A wrong phone match (recycled number)
@@ -197,17 +199,13 @@ def queries(p):
             yield "name", params
 
 
-def age_band(age):
-    if age is None:
-        return "unknown"
-    return "<23" if age < 23 else "23-39" if age < 40 else "40-64" if age < 65 else "65+"
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-matches", type=int, default=100)
-    ap.add_argument("--ages", help="age bands to run, in order, e.g. 40-64,23-39,65+ (also: <23, unknown)")
-    ap.add_argument("--required", help='PDL "required" fields, e.g. "job_title AND job_company_name"')
+    ap.add_argument("--min-age", type=int, help="only people at least this old (unknown age is left out)")
+    ap.add_argument("--max-age", type=int, help="only people at most this old (unknown age is left out)")
+    ap.add_argument("--required", default="job_title AND job_company_name",
+                    help='PDL "required" fields; matches without them are not returned or charged ("" for none)')
     ap.add_argument("--dry-run", action="store_true", help="show the lookups without calling PDL")
     args = ap.parse_args()
     # The environment setting was first saved as DL_API_KEY; accept both.
@@ -216,10 +214,10 @@ def main():
         raise SystemExit("PDL_API_KEY is not set (add it in the environment settings, then start a new session)")
 
     people = [json.loads(line) for line in open(QUEUE)]
-    if args.ages:
-        bands = args.ages.split(",")
-        people = sorted((p for p in people if age_band(p["age"]) in bands),
-                        key=lambda p: bands.index(age_band(p["age"])))
+    if args.min_age is not None:
+        people = [p for p in people if p["age"] is not None and p["age"] >= args.min_age]
+    if args.max_age is not None:
+        people = [p for p in people if p["age"] is not None and p["age"] <= args.max_age]
 
     EVIDENCE.mkdir(parents=True, exist_ok=True)
     month = dt.date.today().strftime("%Y-%m")
