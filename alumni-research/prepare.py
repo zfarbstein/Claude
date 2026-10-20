@@ -103,9 +103,10 @@ def main():
     with open(QUEUE, "w") as f:
         for p in queue:
             f.write(json.dumps(p) + "\n")
-    with open(ANSWER_KEY, "w") as f:
-        for k in key:
-            f.write(json.dumps(k) + "\n")
+    if args.mode == "pilot":  # a todo run must not wipe the pilot's answer key
+        with open(ANSWER_KEY, "w") as f:
+            for k in key:
+                f.write(json.dumps(k) + "\n")
 
     skipped = {}
     for p, r in unique:

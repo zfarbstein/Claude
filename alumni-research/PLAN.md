@@ -295,14 +295,53 @@ Phase 0b already passed the go/no-go (24 of 51 verified, no wrong person).
 ### Phase 5: score, export, and the sheet
 Follow section 5.
 
-### Phase 6: what PDL can't settle
-1. **Needs review** → the team's review sheet (section 5.4). Most take under a
-   minute with the lead and LinkedIn link.
-2. **Not found, working age** → web research per the README's research
-   protocol, highest value first (40–64, then 23–39). No LinkedIn automation:
-   it violates LinkedIn's terms and gets accounts banned.
-3. **Everyone without a verified answer** → alumni survey (draft below, sent by
-   the chapter, not by Claude). Survey answers count as verified (self-reported).
+### Phase 6: everyone PDL didn't place (no match, or no job listed)
+Because lookups require a listed job, PDL people without one come back as "no
+match" for free; they land here with everyone PDL doesn't have. Nobody is
+dropped: every alumnus under 65 without a verified job goes through 6a and 6b.
+Goal is **good careers**, so effort and output rank by career value (6d).
+
+**6a. Professional registries (free, automatic, official).** For every person
+left: NPI registry (doctors, dentists, other health providers; API), FINRA
+BrokerCheck (brokers and advisors, current firm; API), Florida Bar directory
+(lawyers; shows law school and admission year), Florida DBPR license lookup
+(CPAs, engineers, architects, real estate brokers, contractors). These are
+good careers by definition. A hit counts only with an exact name match, a
+single matching record, and the roster state or city; otherwise it's a lead.
+A Florida Bar record showing UF law plus a fitting admission year can verify
+under rule 2c; the others are usually needs-review leads. Build as
+`registries.py`, writing evidence in the same format.
+
+**6b. Web research by Claude**, per the README protocol, for people 6a didn't
+place. Pilot 2026-10-20 on 6 alumni under 65 that PDL couldn't place (5
+distinctive names, 1 common):
+- 4 of 6 got a plausible job lead (a federal agency research director with a
+  UF engineering degree; a VP of strategic sourcing in the roster city; a
+  clinic executive director in the roster city; a possible attorney, weak).
+  The common name and one other found nothing.
+- **0 of 6 verified.** The pages that tie the person to UF are LinkedIn
+  (can't be fetched or automated) or search summaries (don't count); the
+  fetchable pages (company org charts, agency bios) give job and city only.
+- The first plain search found nothing for all 6; the second, with city and
+  role words, found the 4. Budget 2–4 searches and up to 3 page fetches per
+  person.
+- So 6b produces **needs-review leads with links** for the team, not
+  verifications, unless a company or agency bio mentions UF.
+- Scale: ~540 people under 65. Several sessions; could be parallelized with
+  subagents if the user opts in.
+
+**6c. Team review + survey.** Leads from PDL, 6a and 6b go to the review
+sheet (5.4); the team opens the LinkedIn link and marks correct or wrong. The
+survey (section 9) covers the rest; self-reported answers count as verified.
+
+**6d. Career value.** Store PDL's `job_title_levels` (owner, partner, cxo,
+vp, director, manager, senior, …), company and industry; for registry and web
+leads, derive the level from the title and license. Add an `AI Seniority`
+column; sort the review sheet and the final contact list by it (partner /
+owner / C-level / VP / director / licensed professional first). Web research
+goes in age order 35–64, then 22–34 (established careers first). A lead whose
+job is clearly entry-level or unrelated to a career path is recorded and not
+researched further. The user defines "good career" precisely (section 8).
 
 ---
 
@@ -406,6 +445,11 @@ columns with `AI Status = SELF-REPORTED` and are eligible for 5.3.
 
 ## 8. Decisions waiting on the user
 - Send date of birth to PDL as a lookup input? (default no)
+- What counts as a "good career" for the contact list: a minimum level
+  (e.g. manager and up, or any licensed professional), industries to
+  favor, and whether to keep everyone but sorted, or drop the rest?
+- Run web research (6b) with parallel subagents (faster, uses more of the
+  plan's usage), or one session at a time?
 - Allow filling the team's columns (5.3) at all, or AI columns only?
 - Who sends the survey, and from what address?
 - What does Research Status "Unc" mean?
