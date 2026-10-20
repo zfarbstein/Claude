@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -27,7 +28,7 @@ API = "https://api.peopledatalabs.com/v5/person/enrich"
 MIN_LIKELIHOOD = 8  # PDL's 1-10 confidence; 8+ is its "high confidence" band
 
 
-def lookup(key, params):
+def lookup(key, params, tries=6):
     q = urllib.parse.urlencode({**params, "min_likelihood": MIN_LIKELIHOOD, "titlecase": "true"})
     req = urllib.request.Request(f"{API}?{q}", headers={"X-Api-Key": key, "Accept": "application/json"})
     try:
@@ -36,6 +37,9 @@ def lookup(key, params):
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return None  # no match, not charged
+        if e.code == 429 and tries > 1:  # free plan allows only a few calls a minute
+            time.sleep(int(e.headers.get("Retry-After") or 60))
+            return lookup(key, params, tries - 1)
         body = e.read().decode(errors="replace")[:300]
         raise SystemExit(f"PDL error {e.code}: {body}")
 
@@ -67,8 +71,19 @@ def page_lines(d):
     return lines
 
 
+def unmask(v):
+    """The free plan sends `true` for fields it withholds; treat those as missing."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, dict):
+        return {k: unmask(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [unmask(x) for x in v]
+    return v
+
+
 def evidence_from(person, resp, by):
-    d = resp["data"]
+    d = unmask(resp["data"])
     url = f"pdl:{person['row']}:{by}"
     lines = page_lines(d)
     PAGES.mkdir(parents=True, exist_ok=True)
