@@ -47,3 +47,11 @@ class Careers(unittest.TestCase):
         self.assertEqual(classify("Audit Partner")["level"], 5)
         self.assertEqual(classify("Partner Manager")["level"], 2)  # a manager, not a partner
         self.assertEqual(classify("Channel Partner Account Executive")["level"], 0)
+        self.assertEqual(classify("Cheif Executive Officer")["level"], 5)
+        self.assertEqual(classify("Managing Member")["level"], 5)
+        self.assertEqual(classify("General Counsel")["level"], 5)
+        self.assertEqual(classify("Associate General Counsel")["level"], 0)
+        self.assertEqual(classify("Circuit Court Judge")["level"], 5)
+        self.assertEqual(classify("Managing Director")["level"], 4)
+        self.assertEqual(classify("Chief Process Control Engineer")["level"], 1)
+        self.assertEqual(classify("Chief Operating Officer")["level"], 5)
