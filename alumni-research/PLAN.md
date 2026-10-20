@@ -19,7 +19,7 @@ coverage: a wrong employer sends someone to the wrong person.
 | Full-run queue | 1,552 people; 50 already have evidence from the test, so **1,502 left** |
 | Free-plan test (100 people) | 0 verified, 50 needs review, 50 not found |
 | Test leads vs the team's answers | 19 agree, 2 disagree (both look like recent job changes), 6 no employer |
-| PDL credits this month | 51 of 100 free used |
+| PDL credits this month | 64 of 100 free used (51 test + 13 Phase 0) |
 | Known setup bug | Environment variable is named `DL_API_KEY`; scripts read `PDL_API_KEY` |
 
 Why nothing verified: on the free plan all 50 matches came from name lookups
@@ -40,14 +40,12 @@ PDL's pricing page: "Free plan: emails, phone, & address data is obfuscated.
 Unlock with Pro." Third-party reviews say withheld fields come back as
 `true`/`false` (matches what we saw, and is why the script now strips them).
 
-**2.2 Email and phone lookups will start working on Pro. Likely, not proven.**
+**2.2 Email and phone lookups. Settled by Phase 0: they work on the free plan;
+our threshold was discarding them.**
 PDL documents that `email`, `phone` (must be `+1…`) and `email_hash` each work
-as a lookup on their own. No page says the free plan blocks them as *inputs*;
-it only says contact data is hidden in *outputs*. 0 matches out of 121 tries is
-suspicious, but two explanations remain: (a) the free plan blocks or masks
-contact-based matching, or (b) PDL doesn't have those addresses. The Pro
-re-test (Phase 3) settles it. If email and phone still match almost nobody on
-Pro, lower every estimate below by about a third.
+as a lookup on their own. The 0-of-121 in the test was our own setting:
+`enrich_pdl.py` asks for likelihood ≥ 8, and PDL scores an email-only or
+phone-only match 4–7 even when it's right. See "Phase 0 results" below.
 Inputs available among the 1,502 left: 645 emails, 990 phones, **1,071 with at
 least one**. Email mix: 267 gmail, ~180 older providers (aol, bellsouth,
 comcast, msn, hotmail), 48 `ufl.edu` (student addresses, mostly dead, but PDL
@@ -122,12 +120,35 @@ numbers after Phase 3.
 
 ## 4. Phases
 
-### Phase 0: optional, now, free credits (49 left this month)
-Settle 2.2 before paying. For ~10 test people who matched by name and have a
-roster email, look up by email only. If PDL returns the same record for some,
-email input works on free and the 0-of-53 means PDL lacks those addresses
-(lower expectations before paying). If none match, it supports "the free plan
-blocks it." Costs at most ~10 free credits. **Ask the user first.**
+### Phase 0: done 2026-10-20 (13 free credits; 36 left this month)
+Test people PDL had already matched by name, with a roster email and a
+LinkedIn on the match; looked up again with `min_likelihood=2` and
+`include_if_matched=true`. Raw responses in `data/phase0/` (not in git).
+
+| Lookup | Tried | Returned | Same person as the name match | Likelihood |
+|---|---|---|---|---|
+| Email only | 8 | 7 | **7 of 7** | 4–6 |
+| Phone only | 5 | 4 | 2 of 4 | right ones 7, wrong ones 4 |
+| LinkedIn URL (control) | 2 | 2 | 2 of 2 | 9 |
+
+- Every email match was the right person, and PDL's `matched` field confirmed
+  it matched on the email. All 7 also show UF, which with an email match
+  satisfies rule 2: **all 7 would be VERIFIED on the free plan** once the
+  threshold is fixed. 6 of 7 have an employer.
+- The two phone matches at likelihood 4 were different people (different last
+  name, no UF): recycled numbers. The scoring's exact-last-name rule would
+  reject them, but they still cost credits.
+- Caveat: these 8 were people PDL already knew, so 7 of 8 overstates the hit
+  rate for emails in general.
+
+Consequences, folded into Phase 1:
+- Email lookups use `min_likelihood=4`, and count as proof only when PDL's
+  `matched` includes `email`.
+- Phone lookups use `min_likelihood=7` (misses are free; wrong people aren't).
+- `score.py` rule 2: replace the flat "likelihood ≥ 8" with the above.
+- The free plan can verify people by email. Pro is still worth it for speed
+  (100 vs. ~1,000+ matches a month) and for location, which name-only matches
+  need as their second fact.
 
 ### Phase 1: code changes, before subscribing (no credits)
 1. `enrich_pdl.py`
@@ -139,6 +160,7 @@ blocks it." Costs at most ~10 free credits. **Ask the user first.**
      full run.
    - `include_if_matched=true`; store the matched inputs in evidence and the
      saved page text, so `score.py` can use "email matched" as proof.
+   - Per-input thresholds from Phase 0: email 4, phone 7, name 8.
    - `--ages 40-64,23-39,65+` to order and filter the queue.
    - `--budget N` that counts matches across runs (read existing evidence), so
      a resumed run can't overspend.
@@ -146,13 +168,17 @@ blocks it." Costs at most ~10 free credits. **Ask the user first.**
      renamed.
    - Optional: Bulk API (100 per call).
 2. `common.py`: add the old ISP domains to `GENERIC_EMAIL_DOMAINS`.
-3. `score.py`: accept a PDL email or phone match reported by
-   `include_if_matched` as the identity proof in rule 2 (still needs one more
-   fact). Unit test for it.
-4. `export.py`: changes in section 5.
-5. `review.py` (new): builds the review sheet and merges decisions back
+3. `score.py`: accept a PDL email match (likelihood ≥ 4) or phone match
+   (≥ 7) as the identity proof in rule 2 only when `matched` lists that input;
+   still needs one more fact. Unit tests for both, and for a phone match at 4
+   being rejected.
+4. Before paying: spend this month's remaining free credits re-running the
+   test people who have an email, with the fixed settings, and re-score. This
+   gives a free, measured verified rate.
+5. `export.py`: changes in section 5.
+6. `review.py` (new): builds the review sheet and merges decisions back
    (section 5).
-6. Unit tests pass; dry run (`--dry-run`) on the pilot queue shows the lookup
+7. Unit tests pass; dry run (`--dry-run`) on the pilot queue shows the lookup
    order without calling PDL.
 
 ### Phase 2: user subscribes
@@ -292,7 +318,6 @@ columns with `AI Status = SELF-REPORTED` and are eligible for 5.3.
 3. Commit and push code changes only.
 
 ## 8. Decisions waiting on the user
-- Run Phase 0 with free credits? (recommended)
 - Send date of birth to PDL as a lookup input? (default no)
 - Include ages 65+ in the paid run, or leave them to the survey?
 - Allow filling the team's columns (5.3) at all, or AI columns only?
