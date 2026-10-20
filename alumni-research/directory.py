@@ -1,24 +1,22 @@
 """Build the brothers' alumni career directory (an Excel workbook) from the research results.
 
-    python3 directory.py                         # -> data/output/alumni_directory.xlsx
-    python3 directory.py --after-libreoffice F   # after recalculating F with LibreOffice (see below)
+    python3 directory.py            # -> data/output/alumni_directory.xlsx
 
-Tabs: Start Here (instructions), Alumni Directory (confirmed jobs: the research team's Complete /
-Partial rows and rows score.py VERIFIED), Needs Review (everyone else, each with a reason and
-Decision / Reviewer Notes columns), Fields at a Glance (counts by Field and Job Type).
+Tabs, in order: Start Here; Find Your Field (each field links to its own tab, highest Score first); Top
+Picks (Score 8+); All Alumni (the master list: research team Complete / Partial rows and rows score.py
+VERIFIED); Needs Review (everyone else, each with a reason and Decision / Reviewer Notes columns); one
+tab per field. Laid out for a phone: Name, then Score, Job Title and Employer first, Name frozen.
 
-Field and Job Type come from data/directory_labels.json ({roster row: {"field", "job_type"}}), made
-by classifying each job title + employer into FIELDS and TYPES below; rows without a label get
-blank ones, so label new people before sharing a new version.
+Field and Job Type come from data/directory_labels.json and Score (1-10, career-networking value, with a
+short reason) from data/directory_scores.json, both keyed by roster row and made by classifying /
+scoring each job title + employer (no names). People without them get blanks, so label and score new
+people before sharing a new version.
 
 Only career-useful facts go in. The research team's free-text notes (Additional Info) are never
 copied: they hold internal matching notes, home-address comparisons and other private details.
 Records whose job came from a relative (a different first name on the shared email/phone) keep no
-job facts. Nothing here changes the roster or roster_with_research.csv.
-
-The workbook's counts are formulas. Excel and Google Sheets calculate them on open; to store the
-results for quick-look previews, recalculate the file with LibreOffice and then run
---after-libreoffice on it.
+job facts. Nothing here changes the roster or roster_with_research.csv. The workbook has no
+formulas, so it shows the same everywhere, including phone previews; counts are a snapshot.
 """
 import argparse
 import collections
@@ -26,20 +24,20 @@ import csv
 import datetime as dt
 import json
 import re
-import shutil
 import urllib.parse
-import zipfile
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.hyperlink import Hyperlink
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
 from careers import classify
 from common import DATA, OUTPUT, STATE_NAMES, norm, parse_address, parse_date
 
 LABELS = DATA / "directory_labels.json"
+SCORES = DATA / "directory_scores.json"
 FIELDS = [
     "Accounting & Tax",
     "Banking, Investing & Wealth Management",
@@ -366,7 +364,7 @@ def build_records():
 
 FONT = "Arial"
 RED = "8C1D1D"     # Delta Chi red: white text on it is 9.1:1
-AMBER = "7A4B00"   # Needs Review headers: white text on it is 7.9:1
+AMBER = "7A4B00"   # Needs Review headers: white text on it is 7.4:1
 FILL_IN = "E8D9B5" # editable review columns (also named "(fill in)", so color isn't the only cue)
 INK = "1F1F1F"
 LINK = "0B57A4"    # 7:1 on white
@@ -374,10 +372,19 @@ thin = Side(style="thin", color="BFBFBF")
 SENIORITY = {5: "1 - Owner / Partner / Top Executive", 4: "2 - VP / Managing Director", 3: "3 - Director",
              2: "4 - Manager", 1: "5 - Senior", 0: "6 - Professional"}
 STUDENT, RETIRED = "7 - Student / In Training", "8 - Retired"
+# Sheet names can't hold "/" or run past 31 characters.
+TAB = {"Banking, Investing & Wealth Management": "Banking & Investing",
+       "Pharma, Biotech & Medical Devices": "Pharma, Biotech & Med Devices", "Other / Unknown": "Other"}
+STATE_CODE = {}
+scores = {}
 
 
 def font(**kw):
     return Font(name=FONT, size=kw.pop("size", 11), color=kw.pop("color", INK), **kw)
+
+
+def load_scores():
+    return {int(k): v for k, v in json.load(open(SCORES)).items()} if SCORES.exists() else {}
 
 
 def labels_for(r):
@@ -400,30 +407,39 @@ def seniority(r, lab):
     return SENIORITY[r["level"]]
 
 
-def header_row(ws, headers, widths, color):
-    for c, (h, w) in enumerate(zip(headers, widths), 1):
-        cell = ws.cell(row=1, column=c, value=h)
-        cell.font = font(bold=True, color="FFFFFF")
-        cell.fill = PatternFill("solid", fgColor=color)
-        cell.alignment = Alignment(vertical="center", wrap_text=True)
-        cell.border = Border(bottom=thin)
-        ws.column_dimensions[get_column_letter(c)].width = w
-    ws.row_dimensions[1].height = 32
+def score(r):
+    s = scores.get(r["row"]) if (r["title"] or r["employer"]) else None
+    return (s["score"], s["reason"]) if s else (None, "")
 
 
-def link(cell, url, text):
+def location_text(r):
+    """'Tampa, FL'; a foreign region stays as written."""
+    if not STATE_CODE:
+        STATE_CODE.update({name: code for code, name in STATE_FULL.items()})
+    st = STATE_CODE.get(r["state"], r["state"])
+    return ", ".join(x for x in (r["city"], st) if x)
+
+
+def linkedin_username(url):
+    m = re.search(r"linkedin\.com/in/([^/?#]+)", url or "")
+    return urllib.parse.unquote(m.group(1)) if m else ""
+
+
+def best_first(r):
+    s, _ = score(r)
+    return (s is None, -(s or 0), r["first"].lower(), r["last"].lower())
+
+
+def link(cell, target, text, internal=False):
     cell.value = text
-    cell.hyperlink = url
+    if internal:
+        cell.hyperlink = Hyperlink(ref=cell.coordinate, location=target, display=text)
+    else:
+        cell.hyperlink = target
     cell.font = font(color=LINK, underline="single")
 
 
-def add_table(ws, name, ref):
-    t = Table(displayName=name, ref=ref)
-    t.tableStyleInfo = TableStyleInfo(name="TableStyleLight1", showRowStripes=True)
-    ws.add_table(t)
-
-
-def print_setup(ws, landscape=True, pages_wide=1, title_cols=None):
+def print_setup(ws, landscape=True, pages_wide=1, title_rows=None):
     ws.page_setup.paperSize = ws.PAPERSIZE_LETTER
     ws.page_setup.pageOrder = "overThenDown"  # a person's whole row prints on consecutive pages
     ws.page_margins.left = ws.page_margins.right = 0.4
@@ -432,46 +448,70 @@ def print_setup(ws, landscape=True, pages_wide=1, title_cols=None):
     ws.page_setup.fitToWidth = pages_wide
     ws.page_setup.fitToHeight = 0
     ws.sheet_properties.pageSetUpPr.fitToPage = True
-    if title_cols:
-        ws.print_title_rows = "1:1"
-        ws.print_title_cols = title_cols
+    if title_rows:
+        ws.print_title_rows = title_rows
+        ws.print_title_cols = "A:A"
 
 
-def sort_key(r):
-    lab = labels_for(r)
-    return (not lab["field"], lab["field"] == "Other / Unknown", lab["field"],
-            seniority(r, lab) or "9", r["last"].lower(), r["first"].lower())
+# Column name -> width. Each people tab picks its columns from here, most useful first (iPhone shows the
+# first few columns; Name stays on screen when scrolling right).
+WIDTH = {"Name": 22, "Score": 8, "Job Title": 30, "Employer": 26, "Field": 30, "Job Type": 26, "Location": 20,
+         "Notes": 26, "Email": 30, "Phone": 15, "LinkedIn": 36, "LinkedIn Username": 24, "Initiated": 11,
+         "Why This Score": 28, "Seniority": 30, "State": 16, "Industry (as listed)": 26, "Time at Employer": 16,
+         "Previous Employers": 34, "Source": 27, "Info As Of": 16, "Last Name": 16, "Status": 29,
+         "Why It Needs Review": 44, "Decision (fill in)": 17, "Reviewer Notes (fill in)": 28,
+         "Possible Job Title": 30, "Possible Employer": 26}
+WRAP = {"Job Title", "Employer", "Notes", "Previous Employers", "Industry (as listed)", "Time at Employer",
+        "LinkedIn", "Why This Score", "Why It Needs Review", "Reviewer Notes (fill in)", "Possible Job Title",
+        "Possible Employer", "Field", "Job Type"}
+PEOPLE = ["Name", "Score", "Job Title", "Employer", "Job Type", "Location", "Notes", "Email", "Phone", "LinkedIn",
+          "LinkedIn Username", "Initiated", "Why This Score", "Seniority", "Industry (as listed)",
+          "Time at Employer", "Previous Employers", "Source", "Info As Of"]
+ALL = PEOPLE[:4] + ["Field"] + PEOPLE[4:] + ["State", "Last Name"]
+REVIEW = ["Name", "Status", "Why It Needs Review", "Decision (fill in)", "Reviewer Notes (fill in)", "Score",
+          "Possible Job Title", "Possible Employer", "Field", "Job Type", "Location", "LinkedIn", "LinkedIn Username",
+          "Email", "Phone", "Initiated", "Why This Score", "Industry (as listed)", "Time at Employer",
+          "Previous Employers", "Notes", "Info As Of", "State"]
 
 
 def values(r):
     lab = labels_for(r)
+    s, why = score(r)
     as_of = None
     if re.fullmatch(r"\d{4}-\d{2}", r["as_of"] or ""):
         as_of = dt.date(int(r["as_of"][:4]), int(r["as_of"][5:7]), 1)
     elif r["source"] == "team" and (r["title"] or r["employer"]):
         as_of = "Research team (2026)"
     return {
-        "Last Name": r["last"], "First Name": r["first"], "Field": lab["field"], "Job Type": lab["job_type"],
+        "Name": f"{r['first']} {r['last']}".strip(), "Last Name": r["last"], "Score": s, "Why This Score": why,
         "Job Title": r["title"], "Possible Job Title": r["title"], "Employer": r["employer"],
-        "Possible Employer": r["employer"], "Seniority": seniority(r, lab), "City": r["city"], "State": r["state"],
-        "Initiated": r["init_year"], "Industry (as listed)": r["industry"], "Time at Employer": r["tenure"],
-        "Previous Employers": r["previous"], "Source": r["confidence"], "Info As Of": as_of, "Notes": r["notes"],
+        "Possible Employer": r["employer"], "Field": lab["field"], "Job Type": lab["job_type"],
+        "Seniority": seniority(r, lab), "Location": location_text(r), "State": r["state"], "Initiated": r["init_year"],
+        "Industry (as listed)": r["industry"], "Time at Employer": r["tenure"], "Previous Employers": r["previous"],
+        "Source": r["confidence"], "Info As Of": as_of, "Notes": r["notes"],
+        "LinkedIn Username": linkedin_username(r["linkedin"]),
         "Status": "Unconfirmed: don't contact yet", "Why It Needs Review": r.get("why", ""),
     }
 
 
-def write_people(ws, name, people, columns, color, wrap):
-    headers = [c for c, _ in columns]
-    header_row(ws, headers, [w for _, w in columns], color)
-    for i, r in enumerate(people, 2):
+def people_table(ws, name, people, columns, color, top=1):
+    """Write a header row at `top` and one row per person, as an Excel table with filter buttons."""
+    for c, h in enumerate(columns, 1):
+        cell = ws.cell(row=top, column=c, value=h)
+        cell.font = font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor=color)
+        cell.alignment = Alignment(vertical="center", wrap_text=True)
+        cell.border = Border(bottom=thin)
+        ws.column_dimensions[get_column_letter(c)].width = WIDTH[h]
+    ws.row_dimensions[top].height = 32
+    for i, r in enumerate(people, top + 1):
         vals = values(r)
-        for c, h in enumerate(headers, 1):
+        for c, h in enumerate(columns, 1):
             cell = ws.cell(row=i, column=c)
             cell.font = font()
-            if h == "Email":
-                if r["email"]:
-                    link(cell, "mailto:" + r["email"], r["email"])
-            elif h == "Phone":
+            if h == "Email" and r["email"]:
+                link(cell, "mailto:" + r["email"], r["email"])
+            elif h == "Phone" and r["phone"]:
                 digits = re.sub(r"\D", "", r["phone"])
                 if len(digits) == 10:
                     link(cell, "tel:+1" + digits, r["phone"])
@@ -479,9 +519,9 @@ def write_people(ws, name, people, columns, color, wrap):
                     cell.value = r["phone"]
             elif h == "LinkedIn":
                 if r["linkedin"]:
-                    # The address itself, not "LinkedIn profile": phone previews that can't follow
+                    # The full address, not "LinkedIn profile": phone previews that can't follow
                     # spreadsheet links can still long-press, copy or auto-link a visible address.
-                    link(cell, r["linkedin"], urllib.parse.unquote(r["linkedin"].replace("https://www.", "")))
+                    link(cell, r["linkedin"], urllib.parse.unquote(r["linkedin"]))
                 else:
                     q = urllib.parse.quote_plus(f"{r['first']} {r['last']} University of Florida")
                     link(cell, f"https://www.linkedin.com/search/results/people/?keywords={q}", "Search LinkedIn")
@@ -491,115 +531,125 @@ def write_people(ws, name, people, columns, color, wrap):
                     cell.number_format = "0"
                 if h == "Info As Of" and isinstance(cell.value, dt.date):
                     cell.number_format = "mmm yyyy"
-            cell.alignment = Alignment(vertical="top", wrap_text=h in wrap, horizontal="left")
-    add_table(ws, name, f"A1:{get_column_letter(len(headers))}{max(len(people), 1) + 1}")
-    ws.freeze_panes = "C2"
-    print_setup(ws, pages_wide=3, title_cols="A:B")
-    # Field / Job Type stay on the shared lists, so the counts keep working after edits.
+                if h == "Score":
+                    cell.font = font(bold=(cell.value or 0) >= 8)
+            cell.alignment = Alignment(vertical="top", wrap_text=h in WRAP,
+                                       horizontal="center" if h == "Score" else "left")
+    t = Table(displayName=name, ref=f"A{top}:{get_column_letter(len(columns))}{top + max(len(people), 1)}")
+    t.tableStyleInfo = TableStyleInfo(name="TableStyleLight1", showRowStripes=True)
+    ws.add_table(t)
+    ws.freeze_panes = f"B{top + 1}"  # header row and the Name column stay on screen
+    print_setup(ws, pages_wide=2, title_rows=f"{top}:{top}")
+
+
+def dropdowns(ws, columns, rows=2000):
     for h, ref in (("Field", f"Lists!$A$2:$A${len(FIELDS) + 1}"), ("Job Type", f"Lists!$B$2:$B${len(TYPES) + 1}")):
-        col = get_column_letter(headers.index(h) + 1)
+        col = get_column_letter(columns.index(h) + 1)
         dv = DataValidation(type="list", formula1=ref, allow_blank=True, showErrorMessage=True, errorStyle="warning",
-                            errorTitle=h, error=f"Pick a {h} from the list so it's counted on Fields at a Glance.")
-        dv.add(f"{col}2:{col}2000")
+                            errorTitle=h, error=f"Pick a {h} from the list.")
+        dv.add(f"{col}2:{col}{rows}")
         ws.add_data_validation(dv)
-    return headers
+
+
+def text_rows(ws, lines, width=62):
+    """A one-column page of headings and short paragraphs (narrow, so it fits a phone screen)."""
+    ws.column_dimensions["A"].width = width
+    styles = {"title": font(size=18, bold=True, color=RED), "head": font(size=13, bold=True, color=RED),
+              "text": font(size=12)}
+    for i, (kind, text) in enumerate(lines, 1):
+        c = ws.cell(row=i, column=1, value=text)
+        c.font = styles[kind]
+        c.alignment = Alignment(wrap_text=True, vertical="top")
+    ws.sheet_view.showGridLines = False
 
 
 def build_workbook(recs, out):
-    global by_row
-    by_row = load_labels()
+    global by_row, scores
+    by_row, scores = load_labels(), load_scores()
+    main = [r for r in recs if r["tier"] == "main"]
+    review = sorted([r for r in recs if r["tier"] == "review"], key=best_first)
+    by_field = collections.defaultdict(list)
+    for r in main:
+        by_field[labels_for(r)["field"] or "Other / Unknown"].append(r)
+    fields = sorted(by_field, key=lambda f: (f == "Other / Unknown", f))
+    top_picks = sorted([r for r in main if (score(r)[0] or 0) >= 8], key=best_first)
+    all_sorted = sorted(main, key=lambda r: ((labels_for(r)["field"] or "Other / Unknown") == "Other / Unknown",
+                                             labels_for(r)["field"], best_first(r)))
+    month = dt.date.today().strftime("%B %Y")
+
     wb = Workbook()
     start = wb.active
     start.title = "Start Here"
-    main = sorted([r for r in recs if r["tier"] == "main"], key=sort_key)
-    review = sorted([r for r in recs if r["tier"] == "review"], key=sort_key)
+    start.sheet_properties.tabColor = "404040"
 
-    # ---------------------------------------------------------------- Alumni Directory
-    dws = wb.create_sheet("Alumni Directory")
-    dws.sheet_properties.tabColor = RED
-    DIR_COLS = [("Last Name", 16), ("First Name", 13), ("Field", 42), ("Job Type", 36), ("Job Title", 38),
-                ("Employer", 32), ("Notes", 34), ("Seniority", 35), ("City", 18), ("State", 20), ("Email", 32),
-                ("Phone", 16), ("LinkedIn", 34), ("Initiated", 13), ("Industry (as listed)", 28),
-                ("Time at Employer", 18), ("Previous Employers", 40), ("Source", 29), ("Info As Of", 20)]
-    write_people(dws, "AlumniDirectory", main, DIR_COLS, RED,
-                 wrap={"Job Title", "Employer", "Notes", "Previous Employers", "Industry (as listed)", "Time at Employer",
-                       "LinkedIn"})
+    # ------------------------------------------------------------ Find Your Field
+    ff = wb.create_sheet("Find Your Field")
+    ff.sheet_properties.tabColor = RED
+    for c, (h, w) in enumerate((("Field (tap to see everyone)", 40), ("Alumni", 10), ("Top Score", 11)), 1):
+        cell = ff.cell(row=1, column=c, value=h)
+        cell.font = font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor=RED)
+        cell.alignment = Alignment(vertical="center", wrap_text=True)
+        ff.column_dimensions[get_column_letter(c)].width = w
+    ff.row_dimensions[1].height = 32
+    for i, f in enumerate(fields, 2):
+        tab = TAB.get(f, f)
+        link(ff.cell(row=i, column=1), f"'{tab}'!A1", f, internal=True)
+        ff.cell(row=i, column=2, value=len(by_field[f])).font = font()
+        ff.cell(row=i, column=3, value=max((score(r)[0] or 0) for r in by_field[f]) or None).font = font()
+        for c in (2, 3):
+            ff.cell(row=i, column=c).alignment = Alignment(horizontal="center")
+    t = Table(displayName="FindYourField", ref=f"A1:C{len(fields) + 1}")
+    t.tableStyleInfo = TableStyleInfo(name="TableStyleLight1", showRowStripes=True)
+    ff.add_table(t)
+    ff.freeze_panes = "A2"
+    ff.cell(row=len(fields) + 3, column=1,
+            value=f"Counts as of {month}. Each field's tab lists everyone in it, highest Score first.").font = \
+        font(italic=True)
+    print_setup(ff, landscape=False)
 
-    # ---------------------------------------------------------------- Needs Review
-    rws = wb.create_sheet("Needs Review")
-    rws.sheet_properties.tabColor = AMBER
-    RV_COLS = [("Last Name", 16), ("First Name", 13), ("Status", 29), ("Why It Needs Review", 58),
-               ("Decision (fill in)", 17), ("Reviewer Notes (fill in)", 30), ("LinkedIn", 34), ("Field", 42),
-               ("Job Type", 36), ("Possible Job Title", 38), ("Possible Employer", 32), ("Seniority", 35), ("City", 18),
-               ("State", 20), ("Email", 32), ("Phone", 16), ("Initiated", 13), ("Industry (as listed)", 28),
-               ("Time at Employer", 18), ("Previous Employers", 40), ("Notes", 30), ("Info As Of", 20)]
-    h = write_people(rws, "NeedsReview", review, RV_COLS, AMBER,
-                     wrap={"Why It Needs Review", "Reviewer Notes (fill in)", "Notes", "Previous Employers", "LinkedIn",
-                           "Possible Job Title", "Possible Employer", "Industry (as listed)", "Time at Employer"})
-    dcol = get_column_letter(h.index("Decision (fill in)") + 1)
-    ncol = get_column_letter(h.index("Reviewer Notes (fill in)") + 1)
-    dv = DataValidation(type="list", formula1='"Correct,Wrong person,Unsure"', allow_blank=True, showInputMessage=True,
-                        promptTitle="Decision", prompt="After checking LinkedIn, choose Correct, Wrong person or Unsure.",
+    # ------------------------------------------------------------ Top Picks, All Alumni, Needs Review
+    tp = wb.create_sheet("Top Picks")
+    tp.sheet_properties.tabColor = RED
+    people_table(tp, "TopPicks", top_picks, PEOPLE[:4] + ["Field"] + PEOPLE[4:], RED)
+
+    al = wb.create_sheet("All Alumni")
+    al.sheet_properties.tabColor = RED
+    people_table(al, "AllAlumni", all_sorted, ALL, RED)
+    dropdowns(al, ALL)
+
+    rv = wb.create_sheet("Needs Review")
+    rv.sheet_properties.tabColor = AMBER
+    people_table(rv, "NeedsReview", review, REVIEW, AMBER)
+    dropdowns(rv, REVIEW)
+    dcol = get_column_letter(REVIEW.index("Decision (fill in)") + 1)
+    ncol = get_column_letter(REVIEW.index("Reviewer Notes (fill in)") + 1)
+    dv = DataValidation(type="list", formula1='"Correct,Wrong person,Unsure"', allow_blank=True,
+                        showInputMessage=True, promptTitle="Decision",
+                        prompt="After checking LinkedIn, choose Correct, Wrong person or Unsure.",
                         showErrorMessage=True, errorStyle="warning", errorTitle="Decision",
                         error="Please choose Correct, Wrong person or Unsure.")
     dv.add(f"{dcol}2:{dcol}2000")
-    rws.add_data_validation(dv)
+    rv.add_data_validation(dv)
     edge = Side(style="medium", color=AMBER)
     for row in range(1, len(review) + 202):
         for col in (dcol, ncol):
-            cell = rws[f"{col}{row}"]
+            cell = rv[f"{col}{row}"]
             if row > 1:
                 cell.fill = PatternFill("solid", fgColor=FILL_IN)
             cell.border = Border(left=edge if col == dcol else cell.border.left,
-                                 right=edge if col == ncol else cell.border.right,
-                                 bottom=cell.border.bottom)
+                                 right=edge if col == ncol else cell.border.right, bottom=cell.border.bottom)
 
-    # ---------------------------------------------------------------- Fields at a Glance
-    gl = wb.create_sheet("Fields at a Glance")
-    count = lambda key, val: sum(1 for r in main if labels_for(r)[key] == val)
-    fields = sorted(FIELDS, key=lambda f: (f == "Other / Unknown", -count("field", f), f))
-    types = sorted(TYPES, key=lambda t: (t == "Other", -count("job_type", t), t))
-    for c, (hd, w) in enumerate(zip(["Field", "In Directory", "Needs Review", "", "Job Type", "In Directory",
-                                     "Needs Review"], [42, 14, 14, 4, 38, 14, 14]), 1):
-        gl.column_dimensions[get_column_letter(c)].width = w
-        if hd:
-            cell = gl.cell(row=1, column=c, value=hd)
-            cell.font = font(bold=True, color="FFFFFF")
-            cell.fill = PatternFill("solid", fgColor=RED)
-            cell.alignment = Alignment(vertical="center", wrap_text=True)
-    gl.row_dimensions[1].height = 32
-    for i, f in enumerate(fields, 2):
-        gl.cell(row=i, column=1, value=f)
-        gl.cell(row=i, column=2, value=f"=COUNTIF('Alumni Directory'!C:C,A{i})")
-        gl.cell(row=i, column=3, value=f"=COUNTIF('Needs Review'!H:H,A{i})")
-    for i, t in enumerate(types, 2):
-        gl.cell(row=i, column=5, value=t)
-        gl.cell(row=i, column=6, value=f"=COUNTIF('Alumni Directory'!D:D,E{i})")
-        gl.cell(row=i, column=7, value=f"=COUNTIF('Needs Review'!I:I,E{i})")
-    nf, nt = len(fields) + 1, len(types) + 1
-    for row in gl.iter_rows(min_row=2, max_row=max(nf, nt), max_col=7):
-        for cell in row:
-            if cell.value is not None:
-                cell.font = font()
-    for col, last in ((1, nf), (5, nt)):
-        tot = last + 1
-        gl.cell(row=tot, column=col, value="Total")
-        for k in (1, 2):
-            letter = get_column_letter(col + k)
-            gl.cell(row=tot, column=col + k, value=f"=SUM({letter}2:{letter}{last})")
-        for k in range(3):
-            cell = gl.cell(row=tot, column=col + k)
-            cell.font = font(bold=True)
-            cell.border = Border(top=Side(style="thin", color=INK))
-    add_table(gl, "FieldCounts", f"A1:C{nf}")
-    add_table(gl, "JobTypeCounts", f"E1:G{nt}")
-    gl.freeze_panes = "A2"
-    gl.cell(row=max(nf, nt) + 3, column=1,
-            value="Sorted by how many alumni are in the directory. Needs Review counts only rows with a possible "
-                  "job.").font = font(italic=True)
-    print_setup(gl, landscape=True)
+    # ------------------------------------------------------------ one tab per field
+    for n, f in enumerate(fields, 1):
+        ws = wb.create_sheet(TAB.get(f, f))
+        people = sorted(by_field[f], key=best_first)
+        ws["A1"] = f"{f}: {len(people)} alumni, highest Score first"
+        ws["A1"].font = font(size=14, bold=True, color=RED)
+        link(ws["A2"], "'Find Your Field'!A1", "Back to Find Your Field", internal=True)
+        people_table(ws, f"Field{n}", people, PEOPLE, RED, top=3)
 
-    # Dropdown lists for Field and Job Type, A to Z with the catch-alls last (hidden; edit here to add a value).
+    # ------------------------------------------------------------ dropdown lists (hidden)
     lists = wb.create_sheet("Lists")
     lists["A1"], lists["B1"] = "Field list", "Job Type list"
     for i, f in enumerate(sorted(FIELDS, key=lambda f: (f == "Other / Unknown", f)), 2):
@@ -612,142 +662,80 @@ def build_workbook(recs, out):
     lists.column_dimensions["A"].width, lists.column_dimensions["B"].width = 42, 38
     lists.sheet_state = "hidden"
 
-    # ---------------------------------------------------------------- Start Here
-    start.column_dimensions["A"].width = 90
-    start.sheet_properties.tabColor = "404040"
-    lines = [
+    # ------------------------------------------------------------ Start Here
+    text_rows(start, [
         ("title", "Delta Chi UF Alumni Career Directory"),
-        ("text", "For Delta Chi brothers only. It has alumni's personal contact details, so please don't forward it "
-                 "outside the chapter, post it online, or add these addresses to mailing lists or group texts."),
-        ("text", "Use it only for one-to-one career networking: no sales pitches, fundraising or mass emails."),
-        ("text", "Information as of October 2026. People change jobs, so check LinkedIn before you reach out."),
-        ("head", "What's in this file"),
-        ("formula", '="Alumni Directory: "&(COUNTA(\'Alumni Directory\'!A:A)-1)&" alumni whose identity and job have been checked. Start here."'),
-        ("formula", '="Needs Review: "&(COUNTA(\'Needs Review\'!A:A)-1)&" alumni we couldn\'t confirm yet. Each row says why. Don\'t contact anyone on this tab until it\'s been checked."'),
-        ("text", "Fields at a Glance: how many alumni work in each field and each job type."),
-        ("head", "How to sort and filter"),
-        ("text", "Each column heading has a filter button. Click it to sort A to Z, or to show only some values, for "
-                 "example Field = Law, or Job Type = Engineering."),
-        ("text", "Windows: select a heading and press Alt + Down Arrow to open its filter menu. Mac: Option + Down "
-                 "Arrow. Ctrl + Shift + L (Mac: Cmd + Shift + F) turns the filter buttons on or off."),
-        ("text", "On a phone, open the file in the free Excel or Google Sheets app. Quick previews (from a text, "
-                 "email or the Files app) show the file but don't let you tap its links; there you can long-press "
-                 "or copy an address instead."),
-        ("text", "Phone (Excel app): tap a heading, then the filter icon. Google Sheets: use Data > Create a filter."),
-        ("text", "The directory starts sorted by Field, then Seniority (most senior first), then last name. To get "
-                 "back to it: sort Last Name A to Z, then Seniority A to Z, then Field A to Z (Other / Unknown will "
-                 "then sort alphabetically instead of last)."),
-        ("text", "Names stay on screen as you scroll right, and headings stay on screen as you scroll down. On a "
-                 "small phone screen you can turn this off under View > Freeze Panes."),
+        ("text", f"{len(main)} alumni with a confirmed job, in {len(fields)} fields. Information as of {month}."),
+        ("text", "For Delta Chi brothers only: please don't forward it, post it, or add these contacts to mailing "
+                 "lists or group texts. Use it for one-to-one career networking only: no sales pitches, "
+                 "fundraising or mass emails."),
+        ("head", "How to use it"),
+        ("text", "1. Open the Find Your Field tab and tap your field. You'll see everyone in it, highest Score first."),
+        ("text", "2. Start with the highest scores. Score (1 to 10) is how useful the contact is likely to be for "
+                 "internships, jobs and advice: how senior he is, whether the job needs a degree, how established "
+                 "the employer is, and how well it fits what brothers study. 'Why This Score' explains it."),
+        ("text", "3. Look him up on LinkedIn first: tap the LinkedIn link, or type his LinkedIn Username into the "
+                 "LinkedIn app's search. Then email him or message him on LinkedIn."),
+        ("text", "Top Picks lists everyone scoring 8 or more. All Alumni lists everyone, with a Field column you "
+                 "can filter."),
+        ("head", "On an iPhone"),
+        ("text", "Open the file in the free Excel app (or Google Sheets): tap the file, tap Share, then choose "
+                 "Excel. A quick preview (from a text, an email or the Files app) can't tap links; there, "
+                 "press and hold an address to open or copy it."),
+        ("text", "Switch tabs with the tab bar at the bottom of the screen, or tap 'Back to Find Your Field' at "
+                 "the top of each field's tab. Names stay on screen as you scroll right."),
+        ("text", "To sort or filter in the Excel app, tap a column heading, then the filter button."),
         ("head", "What the columns mean"),
-        ("text", "Field: the industry of his employer, e.g. Law; Healthcare & Medicine; Banking, Investing & Wealth "
-                 "Management."),
-        ("text", "Job Type: what he does, e.g. Legal, Engineering, Sales & Business Development. An in-house lawyer "
-                 "at a bank is Field = Banking, Investing & Wealth Management, Job Type = Legal."),
-        ("text", "Notes: read this before you reach out. It says if the job may have changed, if newer data shows a "
-                 "different employer, or if the city came from the chapter's mailing address."),
-        ("text", "Seniority: 1 Owner / Partner / Top Executive, 2 VP / Managing Director, 3 Director, 4 Manager, "
-                 "5 Senior, 6 Professional, 7 Student / In Training, 8 Retired. Sorting A to Z puts the most senior first."),
-        ("text", "City and State: where he works or lives now. Phone numbers and emails are links: tap to call or "
-                 "email."),
-        ("text", "Initiated: the year he was initiated, to help you introduce yourself."),
-        ("text", "Industry (as listed), Time at Employer, Previous Employers: as written on LinkedIn or by the "
-                 "research team. Time at Employer may read 'Since 2021' or '4 years'."),
-        ("text", "Source: 'Confirmed by research team' means the chapter's research volunteers found and checked him. "
-                 "'Verified by data match' means a data provider's record matched his email, phone or UF details plus "
-                 "at least one more fact."),
-        ("text", "Info As Of: when the job information was last updated."),
-        ("head", "Needs Review: how to help"),
-        ("text", "These are alumni we couldn't confirm. Possible Job Title and Possible Employer may not be his. "
-                 "Don't contact anyone on this tab, or their family, until the row is checked."),
-        ("text", "To check one: open the LinkedIn link (or Search LinkedIn), compare the name, UF and city, then pick "
-                 "Correct, Wrong person or Unsure in Decision (fill in), and add anything useful in Reviewer Notes "
-                 "(fill in). Those are the only two columns to fill in (columns E and F, shaded tan)."),
-        ("text", "Some rows say the record belonged to a family member who shares his email or phone. We removed "
-                 "that person's details, so those rows have no job; his email or phone on file may reach the family "
-                 "member."),
-        ("text", "Send the file back to the alumni research team when you've made decisions, so confirmed people "
-                 "move to the directory."),
+        ("text", "Job Type: what he does (e.g. Legal, Engineering, Sales). Field: his employer's industry."),
+        ("text", "Notes: read before reaching out. It says if the job may have changed or newer data shows a "
+                 "different employer."),
+        ("text", "Location: where he works or lives now. Initiated: the year he was initiated, to help you "
+                 "introduce yourself."),
+        ("text", "Source: 'Confirmed by research team' (checked by the chapter's research volunteers) or "
+                 "'Verified by data match' (a data provider's record matched his email, phone or UF details plus "
+                 "at least one more fact). Info As Of: when the job information was last updated."),
+        ("head", "Needs Review"),
+        ("text", f"{len(review)} alumni we couldn't confirm yet. Don't contact anyone on this tab, or their "
+                 "family, until the row is checked. Each row says why."),
+        ("text", "To help: open the LinkedIn link, compare the name, UF and city, then choose Correct, Wrong "
+                 "person or Unsure in 'Decision (fill in)' and add anything useful in 'Reviewer Notes (fill in)' "
+                 "(the two tan columns). Send the file back to the alumni research team."),
+        ("text", "Rows that say the record belonged to a family member have no job on purpose: we removed that "
+                 "person's details. His email or phone on file may reach the family member."),
         ("head", "Editing"),
-        ("text", "Nothing is locked. Fix a job, add a note, or type a new row right under a table and it joins the "
-                 "table. Pick Field and Job Type from their dropdowns so the counts on Fields at a Glance include it."),
-        ("text", "If an alumnus asks to be removed or corrected, delete or fix his row and tell the alumni research "
-                 "team so the master roster is updated too."),
+        ("text", "Nothing is locked. All Alumni is the master list; the field tabs, Top Picks and the counts are "
+                 f"a snapshot from {month}. Send corrections, or an alumnus's request to be removed, to the "
+                 "alumni research team so the master roster and the next version are updated."),
         ("head", "Reaching out"),
         ("text", "Say you're a Delta Chi brother at UF, mention his initiation year or a shared major, and ask a "
-                 "specific question (15 minutes of advice, how he got into the field). Keep it short and thank him "
-                 "either way."),
-    ]
-    STYLE = {"title": font(size=18, bold=True, color=RED), "head": font(size=13, bold=True, color=RED),
-             "text": font(), "formula": font()}
-    for i, (kind, text) in enumerate(lines, 1):
-        c = start.cell(row=i, column=1, value=text)
-        c.font = STYLE[kind]
-        c.alignment = Alignment(wrap_text=True, vertical="top")
-    start.sheet_view.showGridLines = False
+                 "specific question (15 minutes of advice, how he got into the field). Keep it short and thank "
+                 "him either way."),
+    ])
     print_setup(start, landscape=False)
 
     wb.properties.title = "Delta Chi UF Alumni Career Directory"
-    wb.properties.subject = "Alumni jobs and contacts, sortable by field and job type"
+    wb.properties.subject = "Alumni jobs and contacts by field, with a career-value score"
     wb.properties.creator = "Delta Chi UF alumni research"
-    wb.properties.description = "For Delta Chi brothers only. Information as of October 2026."
+    wb.properties.description = f"For Delta Chi brothers only. Information as of {month}."
     wb.properties.language = "en-US"
     wb.active = 0
     wb.save(out)
-    return main, review
-
-
-def after_libreoffice(path):
-    """A LibreOffice recalculation (which stores the formula results that phone and Drive previews
-    show) drops every table's style and writes each sheet's print titles twice, which makes desktop
-    Excel offer to repair the file. Put the styles back and keep one print-titles name per sheet."""
-    tmp = str(path) + ".tmp"
-    STYLE = ('<tableStyleInfo name="TableStyleLight1" showFirstColumn="0" showLastColumn="0" '
-             'showRowStripes="1" showColumnStripes="0"/>')
-    fixed = 0
-    with zipfile.ZipFile(path) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
-        for item in zin.infolist():
-            data = zin.read(item.filename)
-            if re.fullmatch(r"xl/tables/table\d+\.xml", item.filename):
-                xml = data.decode("utf-8")
-                if "<tableStyleInfo" not in xml:
-                    xml = re.sub(r"(</table>\s*)$", STYLE + r"\1", xml)
-                    fixed += 1
-                data = xml.encode("utf-8")
-            if item.filename == "xl/workbook.xml":
-                # LibreOffice writes each sheet's print titles twice; Excel would ask to repair the file.
-                xml, seen = data.decode("utf-8"), set()
-                def once(m):
-                    attrs = dict(re.findall(r'(\w+)="([^"]*)"', m.group(1)))
-                    key = (attrs.get("name"), attrs.get("localSheetId"))
-                    if key in seen:
-                        return ""
-                    seen.add(key)
-                    return m.group(0)
-                new = re.sub(r"<definedName\b([^>]*)>.*?</definedName>", once, xml, flags=re.S)
-                if new != xml:
-                    print("removed duplicate defined names")
-                data = new.encode("utf-8")
-            zout.writestr(item, data)
-    shutil.move(tmp, path)
-    return fixed
+    return main, review, fields, top_picks
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--after-libreoffice", metavar="XLSX", help="fix a workbook after a LibreOffice recalculation")
     ap.add_argument("--out", default=str(OUTPUT / "alumni_directory.xlsx"))
     args = ap.parse_args()
-    if args.after_libreoffice:
-        print(f"restored style on {after_libreoffice(args.after_libreoffice)} tables")
-        return
     recs, skipped = build_records()
-    main_rows, review = build_workbook(recs, args.out)
-    unlabeled = sum(1 for r in recs if (r["title"] or r["employer"]) and r["row"] not in by_row)
-    print(f"wrote {args.out}: {len(main_rows)} in the directory, {len(review)} need review; "
-          f"left out: {dict(skipped) or 'none'}")
-    if unlabeled:
-        print(f"{unlabeled} people with a job have no Field / Job Type yet (add them to {LABELS.name})")
+    main_rows, review, fields, top = build_workbook(recs, args.out)
+    jobs = [r for r in recs if r["title"] or r["employer"]]
+    print(f"wrote {args.out}: {len(main_rows)} in the directory across {len(fields)} field tabs, "
+          f"{len(top)} top picks, {len(review)} need review; left out: {dict(skipped) or 'none'}")
+    for what, d in (("Field / Job Type", by_row), ("Score", scores)):
+        missing = sum(1 for r in jobs if r["row"] not in d)
+        if missing:
+            print(f"{missing} people with a job have no {what} yet")
 
 
 if __name__ == "__main__":
