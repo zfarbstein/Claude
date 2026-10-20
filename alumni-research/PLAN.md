@@ -284,9 +284,12 @@ Phase 0b already passed the go/no-go (24 of 51 verified, no wrong person).
    and compare with the projection before continuing.
 
 ### Phase 4: main run
-1. `prepare.py todo` (alumni only); `enrich_pdl.py --max-age 64 --max-matches
-   <credits left>`. The job-required filter and email → phone → name order are
-   on by default. 65+ (`--min-age 65`) and unknown age only if the user says.
+1. `prepare.py todo` (alumni only), then one contact group at a time, each
+   capped at the credits left (`--max-matches`): `enrich_pdl.py --max-age 64
+   --contact email` (383 people), then `--contact phone` (216), then
+   `--contact name` (301). Score and report after the email group before
+   continuing. The job-required filter is on by default. 65+ (`--min-age 65`)
+   and unknown age only if the user says.
 2. Stop at the month's remaining credits. Report: people done, left, credits
    used, verified so far.
 3. Next month: buy only what's needed, resume (the script skips people with

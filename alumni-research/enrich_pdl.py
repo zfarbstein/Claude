@@ -1,6 +1,6 @@
 """Look people up in People Data Labs and turn each match into evidence.
 
-    PDL_API_KEY=... python3 enrich_pdl.py [--max-matches 100] [--max-age 59] [--dry-run]
+    PDL_API_KEY=... python3 enrich_pdl.py [--max-matches 100] [--max-age 64] [--contact email] [--dry-run]
 
 For each person in data/queue.jsonl without an evidence file:
   1. look up by roster email (strongest: the match is tied to that address),
@@ -206,6 +206,8 @@ def main():
     ap.add_argument("--max-matches", type=int, default=100)
     ap.add_argument("--min-age", type=int, help="only people at least this old (unknown age is left out)")
     ap.add_argument("--max-age", type=int, help="only people at most this old (unknown age is left out)")
+    ap.add_argument("--contact", choices=["email", "phone", "name"],
+                    help="only people with a roster email / only a phone / neither")
     ap.add_argument("--required", default="job_title AND job_company_name",
                     help='PDL "required" fields; matches without them are not returned or charged ("" for none)')
     ap.add_argument("--dry-run", action="store_true", help="show the lookups without calling PDL")
@@ -220,7 +222,10 @@ def main():
         people = [p for p in people if p["age"] is not None and p["age"] >= args.min_age]
     if args.max_age is not None:
         people = [p for p in people if p["age"] is not None and p["age"] <= args.max_age]
-    people.sort(key=lambda p: 0 if p["email"] else 1 if len(p["phone"]) == 10 else 2)
+    group = lambda p: "email" if p["email"] else "phone" if len(p["phone"]) == 10 else "name"
+    people.sort(key=lambda p: ["email", "phone", "name"].index(group(p)))
+    if args.contact:
+        people = [p for p in people if group(p) == args.contact]
 
     EVIDENCE.mkdir(parents=True, exist_ok=True)
     month = dt.date.today().strftime("%Y-%m")
