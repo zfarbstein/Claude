@@ -20,7 +20,7 @@ coverage: a wrong employer sends someone to the wrong person.
 | Free-plan test (100 people) | 0 verified, 50 needs review, 50 not found |
 | Test leads vs the team's answers | 19 agree, 2 disagree (both look like recent job changes), 6 no employer |
 | PDL credits (free, Oct 2026) | 100 of 100 used (51 test, 13 Phase 0, 36 Phase 0b) |
-| PDL Pro (Oct 2026) | 207 of 349 usable used (Phase 3 check + email group); 142 left |
+| PDL Pro (Oct 2026) | 306 of 350 used (Phase 3 check + all three groups under 65); 44 left |
 
 Why nothing verified: on the free plan all 50 matches came from name lookups
 (0 of 53 email and 0 of 68 phone lookups matched), and no match included a
@@ -324,6 +324,25 @@ Phase 0b already passed the go/no-go (24 of 51 verified, no wrong person).
   to finish phone and stop roughly halfway through name.
 - The first run died on a connection reset (TLS handshake, nothing sent or
   charged); `enrich_pdl.py` now retries network errors.
+
+**Phone and name groups (2026-10-20), ages 22–64:**
+
+| Group | People | Credits proj. → actual | Verified proj. → actual | Needs review w/ job | No match / no job |
+|---|---|---|---|---|---|
+| Email | 381 | ~171 → 207 | ~114 → 142 | 65 | 174 |
+| Phone only | 214 | ~64 → 45 | ~43 → 29 (12 by phone, 19 by name) | 16 | 169 |
+| Name only | 299 | ~120 → 54 | ~45 → 39 | 15 | 245 |
+| **Total** | **894** | **~355 → 306** | **~202 → 210** | **96** | **588** |
+
+- Every alumnus under 65 has now been looked up once. Email ran above the
+  projection; phone and name came in under it, so the month covered all three.
+- 44 credits left this month (PDL header; ledger agrees: 306 Pro matches).
+  The 65+ group (519) and unknown age (16) haven't been run.
+- Spot check of 10 random verified from phone/name: all consistent.
+- Verified overall (incl. Phase 0b): 234. With user approval, `export.py
+  --promote` filled the team's job columns on 183 rows (Research Status
+  `AI Verified`); the rest were blocked by team values, a non-blank Research
+  Status, or a possibly outdated job.
 3. Next month: buy only what's needed, resume (the script skips people with
    evidence).
 
