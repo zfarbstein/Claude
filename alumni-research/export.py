@@ -12,9 +12,9 @@ import json
 from common import OUTPUT, read_roster
 
 AI_COLUMNS = ["AI Status", "AI Job Title", "AI Employer", "AI Industry", "AI Previous Employers",
-              "AI Years at Company", "AI City", "AI State", "AI LinkedIn", "AI Evidence",
+              "AI Years at Company", "AI City", "AI State", "AI LinkedIn", "AI Data As Of", "AI Evidence",
               "AI Why Not Verified", "AI Sources"]
-FACT_KEYS = ["title", "employer", "industry", "previous_employers", "years_at_company", "city", "state", "linkedin"]
+FACT_KEYS = ["title", "employer", "industry", "previous_employers", "years_at_company", "city", "state", "linkedin", "as_of"]
 
 
 def main():
@@ -34,7 +34,7 @@ def main():
                 facts = r.get("facts") or {}
                 lead = r["status"] == "NEEDS REVIEW"
                 extra["AI Status"] = r["status"]
-                for col, key in zip(AI_COLUMNS[1:9], FACT_KEYS):
+                for col, key in zip(AI_COLUMNS[1:10], FACT_KEYS):
                     val = facts.get(key, "")
                     extra[col] = f"(unverified) {val}" if lead and val else val
                 extra["AI Evidence"] = "; ".join(r.get("reasons", []))

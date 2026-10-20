@@ -12,6 +12,9 @@ A candidate is VERIFIED only when ALL of these hold:
   2. It has an identity proof:
        a. the roster email or phone number appears on the source, or the
           person is named on the website of their roster work-email domain, OR
+       a2. a data provider (People Data Labs) matched the roster email or
+          phone with high confidence AND one more fact fits (UF, city,
+          grad year or birth year), OR
        b. UF attendance is shown AND Delta Chi membership is shown, OR
        c. UF attendance is shown AND at least two of: lives/lived in the
           roster city, UF graduation year fits the initiation year, birth
@@ -111,7 +114,13 @@ def assess(person, cand):
         reasons.append("seen only in search summaries, not confirmed on the page: " + ", ".join(unread))
 
     supporting = sum([loc, bool(grad), bool(birth)])
-    identity = email or phone or domain or (uf and dchi) or (uf and supporting >= 2)
+    # A data-provider record found by looking up the roster email/phone. The
+    # provider can merge profiles wrongly, so it also needs one fact that fits.
+    lookup = (has(a.get("lookup_match")) and a["lookup_match"].get("by") in ("email", "phone")
+              and (a["lookup_match"].get("likelihood") or 0) >= 8 and (uf or supporting >= 1))
+    if lookup:
+        reasons.append(f"data provider matched the roster {a['lookup_match']['by']}")
+    identity = email or phone or domain or lookup or (uf and dchi) or (uf and supporting >= 2)
     # For the ambiguity check any UF claim counts, even an unconfirmed one:
     # a second UF person with the same name should block verification.
     uf_level = identity or bool(a.get("uf_education"))

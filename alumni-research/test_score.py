@@ -115,6 +115,19 @@ class Rules(unittest.TestCase):
         c["facts"] = {"title": "Partner", "employer": "Acme Law"}
         self.assertEqual(status(c), "NEEDS REVIEW")
 
+    def test_provider_email_match_needs_one_more_fact(self):
+        m = anchor("name: Jon Sample", by="email", likelihood=9)
+        self.assertEqual(status(cand(lookup_match=m)), "NEEDS REVIEW")
+        self.assertEqual(status(cand(lookup_match=m, uf_education=anchor("UF"))), "VERIFIED")
+
+    def test_provider_low_likelihood_does_not_count(self):
+        m = anchor("name: Jon Sample", by="email", likelihood=6)
+        self.assertEqual(status(cand(lookup_match=m, uf_education=anchor("UF"))), "NEEDS REVIEW")
+
+    def test_provider_name_lookup_is_not_a_lookup_match(self):
+        m = anchor("name: Jon Sample", by="name", likelihood=10)
+        self.assertEqual(status(cand(lookup_match=m, uf_education=anchor("UF"))), "NEEDS REVIEW")
+
     def test_nothing_found(self):
         self.assertEqual(status(), "NOT FOUND")
 

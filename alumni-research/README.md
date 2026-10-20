@@ -28,6 +28,23 @@ data/output/roster_with_research.csv roster + "AI ..." columns; original columns
 `prepare.py pilot` instead builds a test batch mixing people the team already
 researched (a blind answer key) with new ones; `evaluate.py` compares.
 
+## Running with People Data Labs
+
+Needs `PDL_API_KEY` in the environment's settings (a new session picks it up)
+and the roster CSV uploaded to the session.
+
+```
+mkdir -p data && cp "<uploaded roster csv>" data/roster.csv
+python3 prepare.py pilot --known 50 --new 50 --seed 11   # first time: test batch
+python3 enrich_pdl.py --max-matches 100                   # free plan = 100 matches/month
+python3 score.py && python3 evaluate.py && python3 export.py
+```
+
+For the full run, use `python3 prepare.py todo` instead of the pilot, and set
+`--max-matches` to what the plan has left. PDL only charges for matches, and
+people who already have an evidence file are skipped, so the run can be
+resumed next month.
+
 ## When is someone VERIFIED?
 
 All of:
@@ -36,6 +53,8 @@ All of:
 2. One identity proof:
    - the roster email or phone appears on the page, or the person is listed on
      the website of their roster work-email domain; **or**
+   - People Data Labs matched the roster email/phone with high confidence
+     **and** one more fact fits (UF, city, grad year or birth year); **or**
    - UF attendance **and** Delta Chi are shown; **or**
    - UF attendance **and two** of: lives/lived in the roster city, UF grad year
      fits the initiation year, birth year matches.
